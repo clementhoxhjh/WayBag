@@ -27,19 +27,30 @@ fun WayBagLogo(
         }
 
         Canvas(modifier = Modifier.size(80.dp)) {
-            val strokeWidth = 3f
+            val strokeWidth = 8f // Thick stroke matching the new design
             
-            // Draw the bag body with a gradient for "frosted" effect
+            // Draw the handle
+            val handlePath = Path().apply {
+                moveTo(size.width * 0.35f, size.height * 0.35f)
+                cubicTo(
+                    size.width * 0.35f, size.height * 0.12f,
+                    size.width * 0.65f, size.height * 0.12f,
+                    size.width * 0.65f, size.height * 0.35f
+                )
+            }
+            drawPath(path = handlePath, color = color, style = Stroke(width = strokeWidth))
+
+            // Draw the bag body
             val bagPath = Path().apply {
-                moveTo(size.width * 0.3f, size.height * 0.45f)
-                lineTo(size.width * 0.7f, size.height * 0.45f)
-                quadraticTo(size.width * 0.85f, size.height * 0.45f, size.width * 0.85f, size.height * 0.55f)
-                lineTo(size.width * 0.85f, size.height * 0.85f)
-                quadraticTo(size.width * 0.85f, size.height * 0.95f, size.width * 0.7f, size.height * 0.95f)
-                lineTo(size.width * 0.3f, size.height * 0.95f)
-                quadraticTo(size.width * 0.15f, size.height * 0.95f, size.width * 0.15f, size.height * 0.85f)
-                lineTo(size.width * 0.15f, size.height * 0.55f)
-                quadraticTo(size.width * 0.15f, size.height * 0.45f, size.width * 0.3f, size.height * 0.45f)
+                moveTo(size.width * 0.22f, size.height * 0.35f)
+                lineTo(size.width * 0.78f, size.height * 0.35f)
+                quadraticTo(size.width * 0.88f, size.height * 0.35f, size.width * 0.9f, size.height * 0.45f)
+                lineTo(size.width * 0.94f, size.height * 0.85f)
+                quadraticTo(size.width * 0.96f, size.height * 0.95f, size.width * 0.82f, size.height * 0.95f)
+                lineTo(size.width * 0.18f, size.height * 0.95f)
+                quadraticTo(size.width * 0.04f, size.height * 0.95f, size.width * 0.06f, size.height * 0.85f)
+                lineTo(size.width * 0.1f, size.height * 0.45f)
+                quadraticTo(size.width * 0.12f, size.height * 0.35f, size.width * 0.22f, size.height * 0.35f)
                 close()
             }
             
@@ -48,27 +59,13 @@ fun WayBagLogo(
                 color = color,
                 style = Stroke(width = strokeWidth)
             )
-            
-            // Draw the handle
-            val handlePath = Path().apply {
-                moveTo(size.width * 0.42f, size.height * 0.45f)
-                quadraticTo(size.width * 0.42f, size.height * 0.32f, size.width * 0.5f, size.height * 0.32f)
-                quadraticTo(size.width * 0.58f, size.height * 0.32f, size.width * 0.58f, size.height * 0.45f)
-            }
-            drawPath(path = handlePath, color = color, style = Stroke(width = strokeWidth))
 
-            // Refined steam
-            val steam1 = Path().apply {
-                moveTo(size.width * 0.48f, size.height * 0.28f)
-                quadraticTo(size.width * 0.44f, size.height * 0.18f, size.width * 0.48f, size.height * 0.1f)
+            // Draw the smile
+            val smilePath = Path().apply {
+                moveTo(size.width * 0.35f, size.height * 0.60f)
+                quadraticTo(size.width * 0.5f, size.height * 0.80f, size.width * 0.65f, size.height * 0.60f)
             }
-            drawPath(path = steam1, color = color.copy(alpha = 0.6f), style = Stroke(width = 2f))
-            
-            val steam2 = Path().apply {
-                moveTo(size.width * 0.52f, size.height * 0.28f)
-                quadraticTo(size.width * 0.56f, size.height * 0.18f, size.width * 0.52f, size.height * 0.1f)
-            }
-            drawPath(path = steam2, color = color.copy(alpha = 0.6f), style = Stroke(width = 2f))
+            drawPath(path = smilePath, color = color, style = Stroke(width = strokeWidth))
         }
     }
 }
