@@ -40,6 +40,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import com.example.waybag.ui.theme.WayBag_Lime
 
 @Composable
@@ -72,6 +73,7 @@ fun QRScanScreen() {
     
     var scannedId by remember { mutableStateOf<String?>(null) }
     var isProcessing by remember { mutableStateOf(false) }
+    val processingLock = remember { AtomicBoolean(false) } // Use AtomicBoolean to prevent race conditions from camera frames
     var validationError by remember { mutableStateOf<String?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -79,7 +81,7 @@ fun QRScanScreen() {
             if (scannedId == null && validationError == null) {
                 CameraPreview(
                     onBarcodeScanned = { barcodeValue ->
-                        if (!isProcessing) {
+                        if (processingLock.compareAndSet(false, true)) {
                             isProcessing = true
                             scope.launch {
                                 try {
@@ -88,12 +90,16 @@ fun QRScanScreen() {
                                         scannedId = barcodeValue.trim()
                                     } else {
                                         validationError = "Invalid QR Code: This bag is not registered in our system."
+                                        processingLock.set(false) // Allow retrying on error
                                     }
                                 } catch (e: Exception) {
                                     Log.e("QRScan", "Failed to record scan", e)
                                     validationError = "Connection Error: ${e.message}"
+                                    processingLock.set(false) // Allow retrying on error
                                 } finally {
                                     isProcessing = false
+                                    // Note: We don't necessarily reset processingLock here if we are in SuccessState
+                                    // to prevent "double scanning" the same code before the UI transitions.
                                 }
                             }
                         }
@@ -117,6 +123,7 @@ fun QRScanScreen() {
                 }
             } else {
                 SuccessState(scannedId!!) {
+                    processingLock.set(false) // Reset the lock when user clicks "Scan Another"
                     scannedId = null // Reset for next scan
                 }
             }

@@ -32,20 +32,36 @@ import com.example.waybag.ui.components.ThinGlassPanel
 import com.example.waybag.ui.components.WayBagLogo
 import com.example.waybag.ui.theme.Premium_Gray
 import com.example.waybag.ui.theme.WayBag_Lime
+import com.example.waybag.ui.viewmodel.DashboardViewModel
+import com.example.waybag.ui.viewmodel.ChartEntry
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 enum class DashboardTab {
     Home, QRScan, AITracker
 }
 
 @Composable
-fun DashboardScreen(onExitClick: () -> Unit) {
+fun DashboardScreen(
+    onExitClick: () -> Unit,
+    viewModel: DashboardViewModel = viewModel()
+) {
     val scrollState = rememberScrollState()
     val user = remember { supabase.auth.currentUserOrNull() }
     val profileName = remember(user) {
         user?.email?.substringBefore('@') ?: "Profile Name"
     }
     
+    val totalScans by viewModel.totalScans.collectAsState()
+    val weeklyData by viewModel.weeklyData.collectAsState()
+    val monthlyData by viewModel.monthlyData.collectAsState()
+    
     var currentTab by remember { mutableStateOf(DashboardTab.Home) }
+
+    LaunchedEffect(currentTab) {
+        if (currentTab == DashboardTab.Home) {
+            viewModel.refreshData()
+        }
+    }
     
     GlassBackground {
         Scaffold(
@@ -69,8 +85,14 @@ fun DashboardScreen(onExitClick: () -> Unit) {
                             verticalArrangement = Arrangement.spacedBy(24.dp)
                         ) {
                             Spacer(modifier = Modifier.height(16.dp))
-                            ProfileStatsPanel(profileName = profileName)
-                            ClimateImpactPanel()
+                            ProfileStatsPanel(
+                                profileName = profileName,
+                                totalScans = totalScans
+                            )
+                            ClimateImpactPanel(
+                                weeklyData = weeklyData,
+                                monthlyData = monthlyData
+                            )
                             Spacer(modifier = Modifier.height(100.dp))
                         }
                     }
@@ -158,7 +180,7 @@ fun DashboardHeader(onExitClick: () -> Unit) {
 }
 
 @Composable
-fun ProfileStatsPanel(profileName: String) {
+fun ProfileStatsPanel(profileName: String, totalScans: Int) {
     ThinGlassPanel(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(24.dp)) {
             Text(
@@ -174,7 +196,7 @@ fun ProfileStatsPanel(profileName: String) {
             Spacer(modifier = Modifier.height(16.dp))
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                    text = "114",
+                    text = totalScans.toString(),
                     style = MaterialTheme.typography.displayLarge.copy(
                         fontSize = 64.sp,
                         fontWeight = FontWeight.Bold
@@ -194,7 +216,10 @@ fun ProfileStatsPanel(profileName: String) {
 }
 
 @Composable
-fun ClimateImpactPanel() {
+fun ClimateImpactPanel(
+    weeklyData: List<ChartEntry>,
+    monthlyData: List<ChartEntry>
+) {
     ThinGlassPanel(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(24.dp)) {
             Text(
@@ -209,19 +234,29 @@ fun ClimateImpactPanel() {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(120.dp),
+                    .height(140.dp), // Increased height for numbers
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.Bottom
             ) {
-                val data = listOf(0.7f, 0.5f, 0.3f, 0.9f, 0.8f, 0.9f, 0.1f)
                 val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
                 
-                data.forEachIndexed { index, value ->
+                // Ensure we always iterate 7 times to keep labels stable
+                repeat(7) { index ->
+                    val entry = weeklyData.getOrNull(index) ?: ChartEntry(0f, 0)
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        if (entry.quantity > 0) {
+                            Text(
+                                text = entry.quantity.toString(),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = WayBag_Lime
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                        }
                         Box(
                             modifier = Modifier
                                 .width(20.dp)
-                                .fillMaxHeight(value)
+                                .fillMaxHeight(if (entry.value > 0.05f) entry.value else 0.05f)
                                 .border(1.dp, WayBag_Lime, RoundedCornerShape(2.dp))
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -241,26 +276,37 @@ fun ClimateImpactPanel() {
             
             // Horizontal Bar Chart
             val months = listOf("Jan", "Feb", "Mar")
-            val contributions = listOf(0.8f, 0.6f, 0.4f)
             
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                months.forEachIndexed { index, month ->
+                repeat(3) { index ->
+                    val entry = monthlyData.getOrNull(index) ?: ChartEntry(0f, 0)
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(month, modifier = Modifier.width(40.dp), fontSize = 12.sp)
+                        Text(months[index], modifier = Modifier.width(40.dp), fontSize = 12.sp)
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth(contributions[index])
+                                .weight(1f) // Use weight to fill space
                                 .height(12.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(WayBag_Lime.copy(alpha = 0.3f))
-                                .border(0.5.dp, WayBag_Lime, RoundedCornerShape(2.dp))
-                        )
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(if (entry.value > 0.02f) entry.value else 0.02f)
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(WayBag_Lime.copy(alpha = 0.3f))
+                                    .border(0.5.dp, WayBag_Lime, RoundedCornerShape(2.dp))
+                            )
+                        }
+                        if (entry.quantity > 0) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = entry.quantity.toString(),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = WayBag_Lime
+                            )
+                        }
                     }
                 }
-                // Solid green bars at the bottom as shown in reference
-                Box(modifier = Modifier.fillMaxWidth().height(12.dp).background(WayBag_Lime).clip(RoundedCornerShape(2.dp)))
-                Box(modifier = Modifier.fillMaxWidth(0.85f).height(12.dp).background(WayBag_Lime).clip(RoundedCornerShape(2.dp)))
-                Box(modifier = Modifier.fillMaxWidth(0.95f).height(12.dp).background(WayBag_Lime).clip(RoundedCornerShape(2.dp)))
             }
         }
     }
