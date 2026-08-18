@@ -35,6 +35,8 @@ import com.example.waybag.ui.theme.WayBag_Lime
 import com.example.waybag.ui.viewmodel.DashboardViewModel
 import com.example.waybag.ui.viewmodel.ChartEntry
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
+import com.example.waybag.data.model.UserProfile
 
 enum class DashboardTab {
     Home, QRScan, AITracker
@@ -43,13 +45,12 @@ enum class DashboardTab {
 @Composable
 fun DashboardScreen(
     onExitClick: () -> Unit,
+    onProfileClick: () -> Unit,
     viewModel: DashboardViewModel = viewModel()
 ) {
     val scrollState = rememberScrollState()
-    val user = remember { supabase.auth.currentUserOrNull() }
-    val profileName = remember(user) {
-        user?.email?.substringBefore('@') ?: "Profile Name"
-    }
+    val userProfile by viewModel.userProfile.collectAsState()
+    val profileName = userProfile?.name ?: "User"
     
     val totalScans by viewModel.totalScans.collectAsState()
     val weeklyData by viewModel.weeklyData.collectAsState()
@@ -65,7 +66,13 @@ fun DashboardScreen(
     
     GlassBackground {
         Scaffold(
-            topBar = { DashboardHeader(onExitClick = onExitClick) },
+            topBar = { 
+                DashboardHeader(
+                    userProfile = userProfile,
+                    onExitClick = onExitClick,
+                    onProfileClick = onProfileClick
+                ) 
+            },
             bottomBar = { 
                 DashboardBottomNav(
                     selectedTab = currentTab,
@@ -112,7 +119,11 @@ fun DashboardScreen(
 }
 
 @Composable
-fun DashboardHeader(onExitClick: () -> Unit) {
+fun DashboardHeader(
+    userProfile: UserProfile?,
+    onExitClick: () -> Unit,
+    onProfileClick: () -> Unit
+) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -154,22 +165,33 @@ fun DashboardHeader(onExitClick: () -> Unit) {
             }
             
             // Sophisticated Avatar Icon
-            Box(contentAlignment = Alignment.BottomEnd) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(Color.LightGray.copy(alpha = 0.3f))
-                        .border(1.dp, Color.White.copy(alpha = 0.5f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(Color.LightGray.copy(alpha = 0.3f))
+                    .border(1.dp, Color.White.copy(alpha = 0.5f), CircleShape)
+                    .clickable { onProfileClick() },
+                contentAlignment = Alignment.Center
+            ) {
+                if (userProfile?.avatar_url != null) {
+                    AsyncImage(
+                        model = userProfile.avatar_url,
+                        contentDescription = "Avatar",
+                        modifier = Modifier.fillMaxSize().clip(CircleShape),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    )
+                } else {
                     Text("👤", fontSize = 24.sp)
                 }
+                
+                // Overlay "+" indicator
                 Box(
                     modifier = Modifier
                         .size(16.dp)
                         .clip(CircleShape)
-                        .background(WayBag_Lime),
+                        .background(WayBag_Lime)
+                        .align(Alignment.BottomEnd),
                     contentAlignment = Alignment.Center
                 ) {
                     Text("+", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)

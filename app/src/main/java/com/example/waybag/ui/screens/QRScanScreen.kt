@@ -434,29 +434,37 @@ fun ScanHistoryScreen(onBack: () -> Unit) {
                     val expiredIds = allScans.filter { scan ->
                         if (scan.status.lowercase() == "pending") {
                             val scanDate = parseIsoTimestamp(scan.timestamp)
-                            scanDate != null && (now.time - scanDate.time) > 20 * 60 * 1000
+                            val isExpired = scanDate != null && (now.time - scanDate.time) > 20 * 60 * 1000
+                            if (isExpired) Log.d("ExpirationCheck", "Found expired scan: ID ${scan.id} from ${scan.timestamp}")
+                            isExpired
                         } else false
                     }.mapNotNull { it.id }
 
                     // 3. Batch update expired scans in database
                     if (expiredIds.isNotEmpty()) {
-                        supabase.from("bag_scans").update({
-                            set("status", "failed")
-                        }) {
-                            filter {
-                                // Manual filter instead of inList to avoid library-specific import issues
-                                expiredIds.forEachIndexed { i, id ->
-                                    if (i == 0) eq("id", id) else or { eq("id", id) }
+                        Log.d("ExpirationCheck", "Attempting to update ${expiredIds.size} scans: $expiredIds")
+                        try {
+                            supabase.from("bag_scans").update({
+                                set("status", "failed")
+                            }) {
+                                filter {
+                                    isIn("id", expiredIds) // Changed back to 'id' (int8)
                                 }
                             }
+                            Log.d("ExpirationCheck", "Update successful")
+                        } catch (e: Exception) {
+                            Log.e("ExpirationCheck", "Update failed: ${e.message}")
                         }
-                        // Re-fetch to get updated statuses
-                        scans = supabase.from("bag_scans")
+                        
+                        // Re-fetch to get updated statuses for the UI
+                        val refreshedResponse = supabase.from("bag_scans")
                             .select {
                                 filter { eq("userId", user.id) }
                                 order("timestamp", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
-                            }.decodeList<BagScan>()
+                            }
+                        scans = refreshedResponse.decodeList<BagScan>()
                     } else {
+                        Log.d("ExpirationCheck", "No expired scans found to update in DB")
                         scans = allScans
                     }
                 }

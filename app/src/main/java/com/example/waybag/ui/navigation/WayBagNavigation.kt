@@ -12,6 +12,7 @@ sealed class Screen(val route: String) {
     object ForgotPassword : Screen("forgot_password")
     object SignUp : Screen("sign_up")
     object Dashboard : Screen("dashboard")
+    object Profile : Screen("profile")
 }
 
 @Composable
@@ -52,11 +53,21 @@ fun WayBagNavHost() {
             )
         }
         composable(Screen.Dashboard.route) {
-            DashboardScreen(onExitClick = {
-                navController.navigate(Screen.Login.route) {
-                    popUpTo(Screen.Dashboard.route) { inclusive = true }
+            DashboardScreen(
+                onExitClick = {
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(Screen.Dashboard.route) { inclusive = true }
+                    }
+                },
+                onProfileClick = {
+                    navController.navigate(Screen.Profile.route)
                 }
-            })
+            )
+        }
+        composable(Screen.Profile.route) {
+            ProfileScreen(
+                onBackClick = { navController.popBackStack() }
+            )
         }
     }
 }

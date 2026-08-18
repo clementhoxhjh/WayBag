@@ -12,12 +12,18 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
+import com.example.waybag.data.model.UserProfile
+import io.github.jan.supabase.postgrest.query.Columns
+
 data class ChartEntry(
     val value: Float,    // Normalized 0.0 to 1.0 for UI bar size
     val quantity: Int    // Actual count to display as text
 )
 
 class DashboardViewModel : ViewModel() {
+
+    private val _userProfile = MutableStateFlow<UserProfile?>(null)
+    val userProfile: StateFlow<UserProfile?> = _userProfile
 
     private val _totalScans = MutableStateFlow(0)
     val totalScans: StateFlow<Int> = _totalScans
@@ -41,10 +47,17 @@ class DashboardViewModel : ViewModel() {
         viewModelScope.launch {
             _isLoading.value = true
             try {
+                // Fetch Profile
+                val profile = supabase.from("profiles").select {
+                    filter { eq("id", user.id) }
+                }.decodeSingleOrNull<UserProfile>()
+                _userProfile.value = profile
+
+                // Fetch Scans
                 val scans = supabase.from("bag_scans").select {
                     filter {
                         eq("userId", user.id)
-                        neq("status", "pending") // Only count non-pending scans (e.g., "completed")
+                        eq("status", "completed") // ONLY count fully validated scans for the Dashboard
                     }
                 }.decodeList<BagScan>()
 
