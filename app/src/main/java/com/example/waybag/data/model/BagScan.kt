@@ -8,5 +8,5 @@ data class BagScan(
     val userId: String,
     val bagUniqueId: String,
     val timestamp: String, // T_QR
-    val status: String = "pending"
+    val status: String = "pending" // "pending", "completed", "failed"
 )

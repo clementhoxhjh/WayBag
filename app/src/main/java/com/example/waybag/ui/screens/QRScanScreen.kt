@@ -10,10 +10,16 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -42,6 +48,35 @@ import java.util.*
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import com.example.waybag.ui.theme.WayBag_Lime
+
+// V3 Robust Parser: Handles ISO 8601 with/without milliseconds, Z, or offset
+fun parseIsoTimestamp(timestamp: String): Date? {
+    if (timestamp.isBlank()) return null
+    
+    // Normalize the string: remove extra precision that SimpleDateFormat can't handle well
+    // e.g. 2024-08-18T05:24:00.123456+00 -> 2024-08-18T05:24:00+0000
+    val normalized = timestamp.replace("Z", "+0000").replace(Regex("\\.\\d+"), "")
+    
+    val formats = listOf(
+        "yyyy-MM-dd'T'HH:mm:ssZ",
+        "yyyy-MM-dd'T'HH:mm:ss",
+        "yyyy-MM-dd HH:mm:ssZ",
+        "yyyy-MM-dd HH:mm:ss"
+    )
+    
+    for (format in formats) {
+        try {
+            val sdf = SimpleDateFormat(format, Locale.US)
+            val hasOffset = timestamp.contains("+") || (timestamp.lastIndexOf("-") > 10) || timestamp.contains("Z")
+            if (!hasOffset) {
+                sdf.timeZone = TimeZone.getTimeZone("UTC")
+            }
+            val date = sdf.parse(normalized)
+            if (date != null) return date
+        } catch (e: Exception) { continue }
+    }
+    return null
+}
 
 @Composable
 fun QRScanScreen() {
@@ -72,12 +107,16 @@ fun QRScanScreen() {
     }
     
     var scannedId by remember { mutableStateOf<String?>(null) }
+    var scanTimeTqr by remember { mutableStateOf<String?>(null) }
     var isProcessing by remember { mutableStateOf(false) }
-    val processingLock = remember { AtomicBoolean(false) } // Use AtomicBoolean to prevent race conditions from camera frames
+    var showHistory by remember { mutableStateOf(false) }
+    val processingLock = remember { AtomicBoolean(false) }
     var validationError by remember { mutableStateOf<String?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        if (hasCameraPermission) {
+        if (showHistory) {
+            ScanHistoryScreen(onBack = { showHistory = false })
+        } else if (hasCameraPermission) {
             if (scannedId == null && validationError == null) {
                 CameraPreview(
                     onBarcodeScanned = { barcodeValue ->
@@ -85,29 +124,37 @@ fun QRScanScreen() {
                             isProcessing = true
                             scope.launch {
                                 try {
-                                    val success = recordScan(barcodeValue)
-                                    if (success) {
+                                    val timestamp = recordScan(barcodeValue)
+                                    if (timestamp != null) {
                                         scannedId = barcodeValue.trim()
+                                        scanTimeTqr = timestamp
                                     } else {
                                         validationError = "Invalid QR Code: This bag is not registered in our system."
-                                        processingLock.set(false) // Allow retrying on error
+                                        processingLock.set(false)
                                     }
                                 } catch (e: Exception) {
                                     Log.e("QRScan", "Failed to record scan", e)
                                     validationError = "Connection Error: ${e.message}"
-                                    processingLock.set(false) // Allow retrying on error
+                                    processingLock.set(false)
                                 } finally {
                                     isProcessing = false
-                                    // Note: We don't necessarily reset processingLock here if we are in SuccessState
-                                    // to prevent "double scanning" the same code before the UI transitions.
                                 }
                             }
                         }
                     }
                 )
                 
-                // QR Finder Overlay
                 QRScannerOverlay()
+
+                IconButton(
+                    onClick = { showHistory = true },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 48.dp, end = 24.dp)
+                        .background(Color.Black.copy(alpha = 0.3f), CircleShape)
+                ) {
+                    Icon(Icons.Default.History, contentDescription = "History", tint = Color.White)
+                }
                 
                 if (isProcessing) {
                     Box(
@@ -122,9 +169,13 @@ fun QRScanScreen() {
                     validationError = null
                 }
             } else {
-                SuccessState(scannedId!!) {
-                    processingLock.set(false) // Reset the lock when user clicks "Scan Another"
-                    scannedId = null // Reset for next scan
+                SuccessState(
+                    uniqueId = scannedId!!,
+                    timestamp = scanTimeTqr ?: ""
+                ) {
+                    processingLock.set(false)
+                    scannedId = null
+                    scanTimeTqr = null
                 }
             }
         } else {
@@ -239,7 +290,16 @@ fun QRScannerOverlay() {
 }
 
 @Composable
-fun SuccessState(uniqueId: String, onReset: () -> Unit) {
+fun SuccessState(uniqueId: String, timestamp: String, onReset: () -> Unit) {
+    val displayTime = remember(timestamp) {
+        val date = parseIsoTimestamp(timestamp)
+        if (date != null) {
+            SimpleDateFormat("hh:mm a", Locale.getDefault()).format(date)
+        } else {
+            timestamp.take(16).replace('T', ' ')
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -265,13 +325,31 @@ fun SuccessState(uniqueId: String, onReset: () -> Unit) {
         Spacer(modifier = Modifier.height(8.dp))
         
         ThinGlassPanel(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                text = "Plastic Bag #$uniqueId has been recorded!",
-                modifier = Modifier.padding(16.dp),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                style = MaterialTheme.typography.bodyLarge
-            )
+            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "Plastic Bag #$uniqueId recorded!",
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Scan Time (T_QR): $displayTime",
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        color = Color.Gray,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+            }
         }
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        Text(
+            text = "Tip: You have 20 minutes to scan your receipt for validation.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.DarkGray,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
         
         Spacer(modifier = Modifier.height(48.dp))
         
@@ -332,47 +410,222 @@ fun ErrorState(message: String, onReset: () -> Unit) {
     }
 }
 
-private suspend fun recordScan(barcodeValue: String): Boolean {
-    val uniqueId = barcodeValue.trim()
-    Log.d("QRScan", "Scanning: '$uniqueId'")
-    
-    try {
-        // 1. 尝试查询该 ID
-        val response = supabase.from("valid_bags")
-            .select {
-                filter {
-                    eq("unique_id", uniqueId)
+@Composable
+fun ScanHistoryScreen(onBack: () -> Unit) {
+    var scans by remember { mutableStateOf<List<BagScan>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        scope.launch {
+            try {
+                val user = supabase.auth.currentUserOrNull()
+                if (user != null) {
+                    // 1. Fetch current pending scans to check for expiration
+                    val response = supabase.from("bag_scans")
+                        .select {
+                            filter { eq("userId", user.id) }
+                            order("timestamp", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                        }
+                    val allScans = response.decodeList<BagScan>()
+                    
+                    // 2. Identify expired scans (Pending > 20 mins)
+                    val now = Date()
+                    val expiredIds = allScans.filter { scan ->
+                        if (scan.status.lowercase() == "pending") {
+                            val scanDate = parseIsoTimestamp(scan.timestamp)
+                            scanDate != null && (now.time - scanDate.time) > 20 * 60 * 1000
+                        } else false
+                    }.mapNotNull { it.id }
+
+                    // 3. Batch update expired scans in database
+                    if (expiredIds.isNotEmpty()) {
+                        supabase.from("bag_scans").update({
+                            set("status", "failed")
+                        }) {
+                            filter {
+                                // Manual filter instead of inList to avoid library-specific import issues
+                                expiredIds.forEachIndexed { i, id ->
+                                    if (i == 0) eq("id", id) else or { eq("id", id) }
+                                }
+                            }
+                        }
+                        // Re-fetch to get updated statuses
+                        scans = supabase.from("bag_scans")
+                            .select {
+                                filter { eq("userId", user.id) }
+                                order("timestamp", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                            }.decodeList<BagScan>()
+                    } else {
+                        scans = allScans
+                    }
                 }
+            } catch (e: Exception) {
+                Log.e("ScanHistory", "Failed to fetch or update history", e)
+            } finally {
+                isLoading = false
             }
-        
-        // 打印原始数据，帮我们在 Logcat 中查看结果
-        Log.d("QRScan", "Supabase Response: ${response.data}")
+        }
+    }
 
-        val validBag = response.decodeSingleOrNull<ValidBag>()
-
-        if (validBag == null) {
-            Log.e("QRScan", "ID not found in database: $uniqueId")
-            return false
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+            .statusBarsPadding()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+            }
+            Text(
+                text = "Scan History",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 8.dp)
+            )
         }
 
-        // 2. 记录扫描记录
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = WayBag_Lime)
+            }
+        } else if (scans.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No scan history found.", color = Color.Gray)
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(scans) { scan ->
+                    HistoryItem(scan)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HistoryItem(scan: BagScan) {
+    val displayTime = remember(scan.timestamp) {
+        val date = parseIsoTimestamp(scan.timestamp)
+        if (date != null) {
+            SimpleDateFormat("MMM dd, hh:mm a", Locale.getDefault()).format(date)
+        } else {
+            scan.timestamp.take(16).replace('T', ' ')
+        }
+    }
+
+    val isExpired = remember(scan.timestamp, scan.status) {
+        if (scan.status.lowercase() == "pending") {
+            val scanDate = parseIsoTimestamp(scan.timestamp)
+            scanDate != null && (System.currentTimeMillis() - scanDate.time) > 20 * 60 * 1000
+        } else false
+    }
+
+    val displayStatus = if (isExpired) "FAILED" else scan.status.uppercase()
+    val statusColor = when {
+        isExpired || scan.status.lowercase() == "failed" -> Color.Red
+        scan.status.lowercase() == "completed" -> WayBag_Lime
+        else -> Color(0xFFFFB300) // Pending
+    }
+
+    ThinGlassPanel(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Bag #${scan.bagUniqueId}",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Text(
+                    text = displayTime,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+                if (isExpired) {
+                    Text(
+                        text = "EXPIRED (Over 20 mins)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Red.copy(alpha = 0.7f)
+                    )
+                }
+            }
+            
+            Surface(
+                color = statusColor.copy(alpha = 0.1f),
+                shape = RoundedCornerShape(8.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, statusColor.copy(alpha = 0.5f))
+            ) {
+                Text(
+                    text = displayStatus,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = statusColor,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+private suspend fun recordScan(barcodeValue: String): String? {
+    val uniqueId = barcodeValue.trim()
+    
+    try {
+        val response = supabase.from("valid_bags")
+            .select {
+                filter { eq("unique_id", uniqueId) }
+            }
+        
+        val validBag = response.decodeSingleOrNull<ValidBag>()
         val user = supabase.auth.currentUserOrNull()
+        
+        // Use a more standard format for local generation
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.US)
+        sdf.timeZone = TimeZone.getTimeZone("UTC")
+        val timestamp = sdf.format(Date())
+
+        if (validBag == null) {
+            if (user != null) {
+                val failedScan = BagScan(
+                    userId = user.id,
+                    bagUniqueId = uniqueId,
+                    timestamp = timestamp,
+                    status = "failed"
+                )
+                supabase.from("bag_scans").insert(failedScan)
+            }
+            return null
+        }
+
         if (user != null) {
-            val timestamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault()).format(Date())
             val scan = BagScan(
                 userId = user.id,
                 bagUniqueId = uniqueId,
-                timestamp = timestamp
+                timestamp = timestamp,
+                status = "pending"
             )
             supabase.from("bag_scans").insert(scan)
-            Log.d("QRScan", "Scan recorded successfully for user: ${user.id}")
-            return true
-        } else {
-            Log.e("QRScan", "User not logged in")
+            return timestamp
         }
     } catch (e: Exception) {
         Log.e("QRScan", "Error during validation: ${e.message}", e)
-        throw e // 抛出异常让外部显示 Connection Error
+        throw e
     }
-    return false
+    return null
 }
