@@ -5,9 +5,14 @@ import kotlinx.serialization.SerialName
 
 @Serializable
 data class BagScan(
-    val id: Long? = null, // Match Supabase 'int8' primary key
+    val id: Long? = null,
     val userId: String,
     val bagUniqueId: String,
     val timestamp: String, // T_QR
-    val status: String = "pending" // "pending", "completed", "failed"
+    val status: String = "pending", // "pending", "completed", "failed"
+    // New fields for Receipt Validation
+    val storeName: String? = null,
+    val gstId: String? = null,
+    val totalAmount: Double? = null,
+    val itemsJson: String? = null // Store list as JSON string
 )

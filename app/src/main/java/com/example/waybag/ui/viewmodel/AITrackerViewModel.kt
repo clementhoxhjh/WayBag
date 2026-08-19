@@ -1,34 +1,45 @@
 package com.example.waybag.ui.viewmodel
 
 import android.graphics.Bitmap
+import android.util.Base64
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.waybag.BuildConfig
 import com.example.waybag.data.model.BagScan
 import com.example.waybag.data.supabase
-import com.google.ai.client.generativeai.GenerativeModel
-import com.google.ai.client.generativeai.type.content
+import com.example.waybag.utils.DateUtils
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
+import io.ktor.client.*
+import io.ktor.client.call.*
+import io.ktor.client.engine.android.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.request.*
+import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.*
+import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
 @Serializable
 data class ReceiptAnalysis(
     val storeName: String = "",
-    val timestamp: String = "", // ISO format
+    val gstId: String = "", // Required for Malaysia
+    val timestamp: String = "",
     val totalAmount: Double = 0.0,
     val hasPlasticBag: Boolean = false,
-    val items: List<String> = emptyList(),
-    val confidence: Float = 0f
+    val items: List<String> = emptyList()
 )
 
 data class AITrackerState(
@@ -46,10 +57,11 @@ class AITrackerViewModel : ViewModel() {
     private val _state = MutableStateFlow(AITrackerState())
     val state: StateFlow<AITrackerState> = _state.asStateFlow()
 
-    private val generativeModel = GenerativeModel(
-        modelName = "gemini-1.5-flash",
-        apiKey = BuildConfig.GEMINI_API_KEY
-    )
+    private val httpClient = HttpClient(Android) {
+        install(ContentNegotiation) {
+            json(Json { ignoreUnknownKeys = true })
+        }
+    }
 
     init {
         fetchPendingScans()
@@ -66,108 +78,162 @@ class AITrackerViewModel : ViewModel() {
                     }
                 }.decodeList<BagScan>()
                 _state.update { it.copy(pendingScans = scans) }
-            } catch (e: Exception) {
-                Log.e("AITracker", "Failed to fetch pending scans", e)
+            } catch (t: Throwable) {
+                Log.e("AITracker", "Fetch failed", t)
             }
         }
     }
 
-    fun selectScan(scan: BagScan) {
-        _state.update { it.copy(selectedScan = scan, analysisResult = null, validationMessage = null) }
+    fun selectScan(scan: BagScan?) {
+        _state.update { it.copy(
+            selectedScan = scan, 
+            analysisResult = null, 
+            validationMessage = null, 
+            error = null,
+            isSuccess = false
+        ) }
     }
 
     fun analyzeReceipt(bitmap: Bitmap) {
         val selectedScan = _state.value.selectedScan ?: return
+        val apiKey = BuildConfig.GEMINI_API_KEY.trim()
         
         viewModelScope.launch {
-            _state.update { it.copy(isAnalyzing = true, error = null) }
+            _state.update { it.copy(isAnalyzing = true, error = null, isSuccess = false, analysisResult = null) }
             try {
-                val prompt = """
-                    Analyze this retail receipt image. 
-                    Extract the following information in JSON format:
-                    - storeName: Name of the shop
-                    - timestamp: The date and time on the receipt in ISO 8601 format (YYYY-MM-DDTHH:MM:SS)
-                    - totalAmount: Total paid amount as a number
-                    - hasPlasticBag: Boolean, true if any item like 'Plastic Bag', 'Carrier Bag', or plastic charge is found.
-                    - items: List of items purchased.
-                    
-                    Respond ONLY with the JSON block.
-                """.trimIndent()
-
-                val inputContent = content {
-                    image(bitmap)
-                    text(prompt)
+                val availableModels = withContext(Dispatchers.IO) {
+                    try {
+                        val response = httpClient.get("https://generativelanguage.googleapis.com/v1beta/models?key=$apiKey")
+                        val body = response.body<JsonObject>()
+                        body["models"]?.jsonArray?.mapNotNull { it.jsonObject["name"]?.jsonPrimitive?.content } ?: emptyList()
+                    } catch (e: Exception) { emptyList() }
                 }
 
-                val response = generativeModel.generateContent(inputContent)
-                val jsonText = response.text?.replace("```json", "")?.replace("```", "")?.trim()
-                
-                if (jsonText != null) {
-                    val analysis = Json { ignoreUnknownKeys = true }.decodeFromString<ReceiptAnalysis>(jsonText)
-                    _state.update { it.copy(analysisResult = analysis) }
-                    validateRules(analysis, selectedScan)
+                val targetModel = availableModels.find { it.contains("gemini-1.5-flash") } ?: availableModels.firstOrNull() ?: "models/gemini-1.5-flash"
+
+                val result = withContext(Dispatchers.IO) {
+                    val outputStream = ByteArrayOutputStream()
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 90, outputStream)
+                    val base64Image = Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
+
+                    val prompt = """
+                        MALAYSIAN RECEIPT AUDIT. Identify Company Name, GST ID (or SST/Registration No), Total Amount, and Items.
+                        Check if any 'Plastic Bag' item exists.
+                        Return ONLY this JSON:
+                        {
+                          "storeName": "Name",
+                          "gstId": "GST/Registration Number",
+                          "timestamp": "YYYY-MM-DDTHH:MM:SS",
+                          "totalAmount": 0.00,
+                          "hasPlasticBag": Boolean,
+                          "items": ["list", "of", "items"]
+                        }
+                    """.trimIndent()
+
+                    val url = "https://generativelanguage.googleapis.com/v1beta/$targetModel:generateContent?key=$apiKey"
+                    val response = httpClient.post(url) {
+                        contentType(ContentType.Application.Json)
+                        setBody(buildJsonObject {
+                            putJsonArray("contents") {
+                                addJsonObject {
+                                    putJsonArray("parts") {
+                                        addJsonObject { put("text", prompt) }
+                                        addJsonObject {
+                                            putJsonObject("inline_data") {
+                                                put("mime_type", "image/jpeg")
+                                                put("data", base64Image)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        })
+                    }
+
+                    if (response.status == HttpStatusCode.OK) {
+                        val body = response.body<JsonObject>()
+                        val text = body["candidates"]?.jsonArray?.get(0)?.jsonObject
+                            ?.get("content")?.jsonObject
+                            ?.get("parts")?.jsonArray?.get(0)?.jsonObject
+                            ?.get("text")?.jsonPrimitive?.content ?: ""
+                        
+                        val jsonText = text.replace("```json", "").replace("```", "").trim()
+                        Json { ignoreUnknownKeys = true }.decodeFromString<ReceiptAnalysis>(jsonText)
+                    } else null
+                }
+
+                if (result != null) {
+                    _state.update { it.copy(analysisResult = result) }
+                    validateAndSubmit(result, selectedScan)
                 } else {
-                    _state.update { it.copy(error = "Could not parse AI response") }
+                    _state.update { it.copy(error = "AI failed to audit receipt. Ensure company name and total are visible.") }
                 }
-            } catch (e: Exception) {
-                _state.update { it.copy(error = "AI Analysis failed: ${e.message}") }
+            } catch (t: Throwable) {
+                _state.update { it.copy(error = "Audit Error: ${t.localizedMessage}") }
             } finally {
                 _state.update { it.copy(isAnalyzing = false) }
             }
         }
     }
 
-    private fun validateRules(analysis: ReceiptAnalysis, scan: BagScan) {
-        // 1. Check for plastic bag
+    private fun validateAndSubmit(analysis: ReceiptAnalysis, scan: BagScan) {
+        val missingFields = mutableListOf<String>()
+        if (analysis.storeName.isBlank() || analysis.storeName.length < 2) missingFields.add("Shop Name")
+        if (analysis.gstId.isBlank() || analysis.gstId.lowercase() == "n/a") missingFields.add("GST/SST ID")
+        if (analysis.totalAmount <= 0) missingFields.add("Total Amount")
+        if (analysis.timestamp.isBlank()) missingFields.add("Receipt Time")
+
+        // 1. Check for plastic bag (Highest priority failure)
         if (analysis.hasPlasticBag) {
-            _state.update { it.copy(validationMessage = "Validation Failed: Plastic bag detected on receipt.") }
-            updateScanStatus(scan, "failed")
+            _state.update { it.copy(validationMessage = "FAILED: Single-use plastic bag charge detected.") }
+            saveResultsToDatabase(scan, analysis, "failed")
             return
         }
 
-        // 2. Time Window Check (20 mins)
-        try {
-            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
-            val receiptDate = sdf.parse(analysis.timestamp)
-            
-            // Robust parsing helper for T_QR (reusing logic from previous fixes)
-            val scanDate = parseIsoTimestamp(scan.timestamp)
-
-            if (receiptDate != null && scanDate != null) {
-                val diffMins = Math.abs(receiptDate.time - scanDate.time) / (60 * 1000)
-                if (diffMins > 20) {
-                    _state.update { it.copy(validationMessage = "Validation Failed: Time difference too large (${diffMins} mins). Must be within 20 mins.") }
-                    updateScanStatus(scan, "failed")
-                    return
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("AITracker", "Time validation error", e)
+        // 2. Check for missing data (Strict Audit)
+        if (missingFields.isNotEmpty()) {
+            val reason = "FAILED: Could not identify ${missingFields.joinToString(", ")}. Please ensure the receipt is flat and clear."
+            _state.update { it.copy(validationMessage = reason) }
+            saveResultsToDatabase(scan, analysis, "failed")
+            return
         }
 
-        // 3. Success
-        _state.update { it.copy(validationMessage = "Success! Receipt validated.", isSuccess = true) }
-        updateScanStatus(scan, "completed")
+        // 3. Success Path (All mandatory data present + No plastic bags)
+        _state.update { it.copy(validationMessage = "SUCCESS! Contribution recorded.", isSuccess = true) }
+        saveResultsToDatabase(scan, analysis, "completed")
     }
 
-    private fun updateScanStatus(scan: BagScan, status: String) {
+    private fun saveResultsToDatabase(scan: BagScan, analysis: ReceiptAnalysis, status: String) {
         viewModelScope.launch {
             try {
+                val itemsJson = Json.encodeToString(analysis.items)
+                
                 supabase.from("bag_scans").update({
                     set("status", status)
+                    set("storeName", analysis.storeName)
+                    set("gstId", analysis.gstId)
+                    set("totalAmount", analysis.totalAmount)
+                    set("itemsJson", itemsJson)
                 }) {
-                    filter { eq("id", scan.id ?: 0) }
+                    filter { eq("id", scan.id ?: 0L) }
                 }
-                fetchPendingScans() // Refresh list
+                fetchPendingScans()
             } catch (e: Exception) {
-                Log.e("AITracker", "Failed to update scan status", e)
+                Log.e("AITracker", "DB Update failed", e)
             }
         }
     }
 
-    private fun parseIsoTimestamp(timestamp: String): Date? {
-        val normalized = timestamp.replace("Z", "+0000").replace(Regex("\\.\\d+"), "")
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.US)
-        return try { sdf.parse(normalized) } catch (e: Exception) { null }
+    private fun parseSimpleIso(timestamp: String): Date? {
+        val formats = listOf("yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd")
+        for (fmt in formats) {
+            try { return SimpleDateFormat(fmt, Locale.US).apply { timeZone = TimeZone.getDefault() }.parse(timestamp) } catch (e: Exception) {}
+        }
+        return null
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        httpClient.close()
     }
 }

@@ -10,7 +10,7 @@ kotlin = "2.4.10"
 composeBom = "2026.02.01"
 navigationCompose = "2.9.8"
 supabase = "3.7.0"
-ktor = "3.5.2"
+ktor = "3.0.1"
 kotlinxSerialization = "1.8.0"
 coil = "2.7.0"
 camerax = "1.4.1"
@@ -42,6 +42,9 @@ supabaseAuth = { group = "io.github.jan-tennert.supabase", name = "auth-kt" }
 supabasePostgrest = { group = "io.github.jan-tennert.supabase", name = "postgrest-kt" }
 supabaseStorage = { group = "io.github.jan-tennert.supabase", name = "storage-kt" }
 ktorClientAndroid = { group = "io.ktor", name = "ktor-client-android", version.ref = "ktor" }
+ktorClientCore = { group = "io.ktor", name = "ktor-client-core", version.ref = "ktor" }
+ktorClientLogging = { group = "io.ktor", name = "ktor-client-logging", version.ref = "ktor" }
+ktorClientContentNegotiation = { group = "io.ktor", name = "ktor-client-content-negotiation", version.ref = "ktor" }
 kotlinxSerializationJson = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 coilCompose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 

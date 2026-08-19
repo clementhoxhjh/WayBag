@@ -69,6 +69,9 @@ dependencies {
     implementation(libs.supabasePostgrest)
     implementation(libs.supabaseStorage)
     implementation(libs.ktorClientAndroid)
+    implementation(libs.ktorClientCore)
+    implementation(libs.ktorClientLogging)
+    implementation(libs.ktorClientContentNegotiation)
     implementation(libs.kotlinxSerializationJson)
     implementation(libs.coilCompose)
     
@@ -78,7 +81,6 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.mlkit.barcode.scanning)
-    implementation(libs.google.generativeai)
     
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))

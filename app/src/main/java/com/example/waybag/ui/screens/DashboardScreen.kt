@@ -37,6 +37,7 @@ import com.example.waybag.ui.viewmodel.ChartEntry
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.waybag.data.model.UserProfile
+import com.example.waybag.ui.screens.AITrackerScreen
 
 enum class DashboardTab {
     Home, QRScan, AITracker
@@ -107,10 +108,7 @@ fun DashboardScreen(
                         QRScanScreen()
                     }
                     DashboardTab.AITracker -> {
-                        // Placeholder for Module 3
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("AI Tracker Module coming soon")
-                        }
+                        AITrackerScreen()
                     }
                 }
             }

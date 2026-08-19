@@ -48,35 +48,7 @@ import java.util.*
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import com.example.waybag.ui.theme.WayBag_Lime
-
-// V3 Robust Parser: Handles ISO 8601 with/without milliseconds, Z, or offset
-fun parseIsoTimestamp(timestamp: String): Date? {
-    if (timestamp.isBlank()) return null
-    
-    // Normalize the string: remove extra precision that SimpleDateFormat can't handle well
-    // e.g. 2024-08-18T05:24:00.123456+00 -> 2024-08-18T05:24:00+0000
-    val normalized = timestamp.replace("Z", "+0000").replace(Regex("\\.\\d+"), "")
-    
-    val formats = listOf(
-        "yyyy-MM-dd'T'HH:mm:ssZ",
-        "yyyy-MM-dd'T'HH:mm:ss",
-        "yyyy-MM-dd HH:mm:ssZ",
-        "yyyy-MM-dd HH:mm:ss"
-    )
-    
-    for (format in formats) {
-        try {
-            val sdf = SimpleDateFormat(format, Locale.US)
-            val hasOffset = timestamp.contains("+") || (timestamp.lastIndexOf("-") > 10) || timestamp.contains("Z")
-            if (!hasOffset) {
-                sdf.timeZone = TimeZone.getTimeZone("UTC")
-            }
-            val date = sdf.parse(normalized)
-            if (date != null) return date
-        } catch (e: Exception) { continue }
-    }
-    return null
-}
+import com.example.waybag.utils.DateUtils
 
 @Composable
 fun QRScanScreen() {
@@ -292,7 +264,7 @@ fun QRScannerOverlay() {
 @Composable
 fun SuccessState(uniqueId: String, timestamp: String, onReset: () -> Unit) {
     val displayTime = remember(timestamp) {
-        val date = parseIsoTimestamp(timestamp)
+        val date = DateUtils.parseIsoTimestamp(timestamp)
         if (date != null) {
             SimpleDateFormat("hh:mm a", Locale.getDefault()).format(date)
         } else {
@@ -433,7 +405,7 @@ fun ScanHistoryScreen(onBack: () -> Unit) {
                     val now = Date()
                     val expiredIds = allScans.filter { scan ->
                         if (scan.status.lowercase() == "pending") {
-                            val scanDate = parseIsoTimestamp(scan.timestamp)
+                            val scanDate = DateUtils.parseIsoTimestamp(scan.timestamp)
                             val isExpired = scanDate != null && (now.time - scanDate.time) > 20 * 60 * 1000
                             if (isExpired) Log.d("ExpirationCheck", "Found expired scan: ID ${scan.id} from ${scan.timestamp}")
                             isExpired
@@ -524,7 +496,7 @@ fun ScanHistoryScreen(onBack: () -> Unit) {
 @Composable
 fun HistoryItem(scan: BagScan) {
     val displayTime = remember(scan.timestamp) {
-        val date = parseIsoTimestamp(scan.timestamp)
+        val date = DateUtils.parseIsoTimestamp(scan.timestamp)
         if (date != null) {
             SimpleDateFormat("MMM dd, hh:mm a", Locale.getDefault()).format(date)
         } else {
@@ -534,7 +506,7 @@ fun HistoryItem(scan: BagScan) {
 
     val isExpired = remember(scan.timestamp, scan.status) {
         if (scan.status.lowercase() == "pending") {
-            val scanDate = parseIsoTimestamp(scan.timestamp)
+            val scanDate = DateUtils.parseIsoTimestamp(scan.timestamp)
             scanDate != null && (System.currentTimeMillis() - scanDate.time) > 20 * 60 * 1000
         } else false
     }
