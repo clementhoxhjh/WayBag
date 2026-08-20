@@ -35,7 +35,7 @@ import java.util.*
 @Serializable
 data class ReceiptAnalysis(
     val storeName: String = "",
-    val gstId: String = "", // Required for Malaysia
+    val regNo: String = "", 
     val timestamp: String = "",
     val totalAmount: Double = 0.0,
     val hasPlasticBag: Boolean = false,
@@ -117,16 +117,21 @@ class AITrackerViewModel : ViewModel() {
                     val base64Image = Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
 
                     val prompt = """
-                        MALAYSIAN RECEIPT AUDIT. Identify Company Name, GST ID (or SST/Registration No), Total Amount, and Items.
-                        Check if any 'Plastic Bag' item exists.
-                        Return ONLY this JSON:
-                        {
-                          "storeName": "Name",
-                          "gstId": "GST/Registration Number",
-                          "timestamp": "YYYY-MM-DDTHH:MM:SS",
-                          "totalAmount": 0.00,
-                          "hasPlasticBag": Boolean,
-                          "items": ["list", "of", "items"]
+                        SYSTEM: MALAYSIAN RETAIL AUDIT EXPERT.
+                        TASK: Extract data from the provided receipt image. 
+                        
+                        CRITICAL FORMAT RULES:
+                        - items: MUST be an array of PLAIN STRINGS. Example: ["MILK", "BREAD"]. DO NOT use objects.
+                        - regNo: Look for 'Registration Number', 'Co. No', 'Company No', or 'SSM No'.
+                        
+                        RETURN ONLY JSON:
+                        { 
+                          "storeName": "Name", 
+                          "regNo": "Number", 
+                          "timestamp": "YYYY-MM-DDTHH:MM:SS", 
+                          "totalAmount": 0.00, 
+                          "hasPlasticBag": Boolean, 
+                          "items": ["Item1", "Item2"] 
                         }
                     """.trimIndent()
 
@@ -147,18 +152,28 @@ class AITrackerViewModel : ViewModel() {
                                     }
                                 }
                             }
+                            putJsonObject("generationConfig") {
+                                put("temperature", 0.1)
+                                put("topP", 0.95)
+                                put("maxOutputTokens", 2048)
+                            }
                         })
                     }
 
                     if (response.status == HttpStatusCode.OK) {
                         val body = response.body<JsonObject>()
-                        val text = body["candidates"]?.jsonArray?.get(0)?.jsonObject
+                        val rawText = body["candidates"]?.jsonArray?.get(0)?.jsonObject
                             ?.get("content")?.jsonObject
                             ?.get("parts")?.jsonArray?.get(0)?.jsonObject
                             ?.get("text")?.jsonPrimitive?.content ?: ""
                         
-                        val jsonText = text.replace("```json", "").replace("```", "").trim()
-                        Json { ignoreUnknownKeys = true }.decodeFromString<ReceiptAnalysis>(jsonText)
+                        val jsonStartIndex = rawText.indexOf("{")
+                        val jsonEndIndex = rawText.lastIndexOf("}")
+                        
+                        if (jsonStartIndex != -1 && jsonEndIndex != -1 && jsonEndIndex > jsonStartIndex) {
+                            val cleanJson = rawText.substring(jsonStartIndex, jsonEndIndex + 1)
+                            Json { ignoreUnknownKeys = true }.decodeFromString<ReceiptAnalysis>(cleanJson)
+                        } else null
                     } else null
                 }
 
@@ -166,7 +181,7 @@ class AITrackerViewModel : ViewModel() {
                     _state.update { it.copy(analysisResult = result) }
                     validateAndSubmit(result, selectedScan)
                 } else {
-                    _state.update { it.copy(error = "AI failed to audit receipt. Ensure company name and total are visible.") }
+                    _state.update { it.copy(error = "AI failed to audit receipt. Ensure info is visible.") }
                 }
             } catch (t: Throwable) {
                 _state.update { it.copy(error = "Audit Error: ${t.localizedMessage}") }
@@ -177,50 +192,88 @@ class AITrackerViewModel : ViewModel() {
     }
 
     private fun validateAndSubmit(analysis: ReceiptAnalysis, scan: BagScan) {
-        val missingFields = mutableListOf<String>()
-        if (analysis.storeName.isBlank() || analysis.storeName.length < 2) missingFields.add("Shop Name")
-        if (analysis.gstId.isBlank() || analysis.gstId.lowercase() == "n/a") missingFields.add("GST/SST ID")
-        if (analysis.totalAmount <= 0) missingFields.add("Total Amount")
-        if (analysis.timestamp.isBlank()) missingFields.add("Receipt Time")
+        viewModelScope.launch {
+            Log.d("AITracker", "Validating: $analysis")
 
-        // 1. Check for plastic bag (Highest priority failure)
-        if (analysis.hasPlasticBag) {
-            _state.update { it.copy(validationMessage = "FAILED: Single-use plastic bag charge detected.") }
-            saveResultsToDatabase(scan, analysis, "failed")
-            return
+            val missingFields = mutableListOf<String>()
+            if (analysis.storeName.isBlank() || analysis.storeName.length < 2) missingFields.add("Shop Name")
+            if (analysis.regNo.isBlank() || analysis.regNo.lowercase().contains("not found")) missingFields.add("Registration Number")
+            if (analysis.totalAmount <= 0) missingFields.add("Total Amount")
+            if (analysis.timestamp.isBlank()) missingFields.add("Receipt Time")
+
+            // 1. Check for Duplicate Receipt (Same RegNo + Same Total + Same Day)
+            try {
+                val duplicateCount = supabase.from("bag_scans").select {
+                    filter {
+                        eq("regNo", analysis.regNo)
+                        eq("totalAmount", analysis.totalAmount)
+                        eq("status", "completed")
+                    }
+                }.decodeList<BagScan>().count { 
+                    it.timestamp.take(10) == analysis.timestamp.take(10) 
+                }
+
+                if (duplicateCount > 0) {
+                    _state.update { it.copy(validationMessage = "FAILED: This receipt has already been used.") }
+                    saveResultsToDatabaseInScope(scan, analysis, "failed")
+                    return@launch
+                }
+            } catch (e: Exception) {
+                Log.e("AITracker", "Duplicate check error", e)
+            }
+
+            // 2. Check for plastic bag
+            if (analysis.hasPlasticBag) {
+                _state.update { it.copy(validationMessage = "FAILED: Plastic bag charge detected.") }
+                saveResultsToDatabaseInScope(scan, analysis, "failed")
+                return@launch
+            }
+
+            // 3. Check for missing data
+            if (missingFields.isNotEmpty()) {
+                val reason = "FAILED: Missing ${missingFields.joinToString(", ")}."
+                _state.update { it.copy(validationMessage = reason) }
+                saveResultsToDatabaseInScope(scan, analysis, "failed")
+                return@launch
+            }
+
+            // 4. Time Window Check (Production Logic: 20 mins)
+            try {
+                val receiptDate = parseSimpleIso(analysis.timestamp)
+                val scanDate = DateUtils.parseIsoTimestamp(scan.timestamp)
+
+                if (receiptDate != null && scanDate != null) {
+                    val diffMillis = Math.abs(receiptDate.time - scanDate.time)
+                    val diffMins = diffMillis / (60 * 1000)
+                    if (diffMins > 20) {
+                        _state.update { it.copy(validationMessage = "FAILED: Time gap ${diffMins}m too large.") }
+                        saveResultsToDatabaseInScope(scan, analysis, "failed")
+                        return@launch
+                    }
+                }
+            } catch (e: Exception) {}
+
+            // Success Path
+            _state.update { it.copy(validationMessage = "SUCCESS! Impact recorded.", isSuccess = true) }
+            saveResultsToDatabaseInScope(scan, analysis, "completed")
         }
-
-        // 2. Check for missing data (Strict Audit)
-        if (missingFields.isNotEmpty()) {
-            val reason = "FAILED: Could not identify ${missingFields.joinToString(", ")}. Please ensure the receipt is flat and clear."
-            _state.update { it.copy(validationMessage = reason) }
-            saveResultsToDatabase(scan, analysis, "failed")
-            return
-        }
-
-        // 3. Success Path (All mandatory data present + No plastic bags)
-        _state.update { it.copy(validationMessage = "SUCCESS! Contribution recorded.", isSuccess = true) }
-        saveResultsToDatabase(scan, analysis, "completed")
     }
 
-    private fun saveResultsToDatabase(scan: BagScan, analysis: ReceiptAnalysis, status: String) {
-        viewModelScope.launch {
-            try {
-                val itemsJson = Json.encodeToString(analysis.items)
-                
-                supabase.from("bag_scans").update({
-                    set("status", status)
-                    set("storeName", analysis.storeName)
-                    set("gstId", analysis.gstId)
-                    set("totalAmount", analysis.totalAmount)
-                    set("itemsJson", itemsJson)
-                }) {
-                    filter { eq("id", scan.id ?: 0L) }
-                }
-                fetchPendingScans()
-            } catch (e: Exception) {
-                Log.e("AITracker", "DB Update failed", e)
+    private suspend fun saveResultsToDatabaseInScope(scan: BagScan, analysis: ReceiptAnalysis, status: String) {
+        try {
+            val itemsJson = Json.encodeToString(analysis.items)
+            supabase.from("bag_scans").update({
+                set("status", status)
+                set("storeName", analysis.storeName)
+                set("regNo", analysis.regNo)
+                set("totalAmount", analysis.totalAmount)
+                set("itemsJson", itemsJson)
+            }) {
+                filter { eq("id", scan.id ?: 0L) }
             }
+            fetchPendingScans()
+        } catch (e: Exception) {
+            Log.e("AITracker", "DB update error", e)
         }
     }
 

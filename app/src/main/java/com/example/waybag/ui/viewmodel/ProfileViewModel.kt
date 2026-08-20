@@ -18,6 +18,7 @@ import java.util.UUID
 data class ProfileState(
     val userProfile: UserProfile? = null,
     val name: String = "",
+    val birthday: String = "",
     val email: String = "",
     val password: String = "",
     val isLoading: Boolean = false,
@@ -48,6 +49,7 @@ class ProfileViewModel : ViewModel() {
                         it.copy(
                             userProfile = p,
                             name = p.name,
+                            birthday = p.birthday,
                             email = p.email,
                             isLoading = false
                         )
@@ -61,6 +63,10 @@ class ProfileViewModel : ViewModel() {
 
     fun onNameChange(newName: String) {
         _state.update { it.copy(name = newName) }
+    }
+
+    fun onBirthdayChange(newBirthday: String) {
+        _state.update { it.copy(birthday = newBirthday) }
     }
 
     fun onEmailChange(newEmail: String) {
@@ -105,16 +111,22 @@ class ProfileViewModel : ViewModel() {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null, updateSuccess = false) }
             try {
-                // Update Name in profiles table
+                // 1. Update Profile in public.profiles table
+                val updates = mutableMapOf<String, String>()
                 if (currentState.name != currentState.userProfile?.name) {
-                    supabase.from("profiles").update(
-                        mapOf("name" to currentState.name)
-                    ) {
+                    updates["name"] = currentState.name
+                }
+                if (currentState.birthday != currentState.userProfile?.birthday) {
+                    updates["birthday"] = currentState.birthday
+                }
+                
+                if (updates.isNotEmpty()) {
+                    supabase.from("profiles").update(updates) {
                         filter { eq("id", user.id) }
                     }
                 }
 
-                // Update Email/Password in Auth
+                // 2. Update Email/Password in Supabase Auth
                 if (currentState.email != currentState.userProfile?.email || currentState.password.isNotEmpty()) {
                     supabase.auth.updateUser {
                         if (currentState.email != currentState.userProfile?.email) {
@@ -124,10 +136,16 @@ class ProfileViewModel : ViewModel() {
                             password = currentState.password
                         }
                     }
+                    // If email changed, we also sync it to the profiles table
+                    if (currentState.email != currentState.userProfile?.email) {
+                        supabase.from("profiles").update(mapOf("email" to currentState.email)) {
+                            filter { eq("id", user.id) }
+                        }
+                    }
                 }
 
                 _state.update { it.copy(isLoading = false, updateSuccess = true, password = "") }
-                fetchProfile() // Refresh
+                fetchProfile() // Refresh local state
             } catch (e: Exception) {
                 _state.update { it.copy(isLoading = false, error = e.message) }
             }

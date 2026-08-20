@@ -284,7 +284,13 @@ fun SignUpScreen(
                                         errorMessage = "Sign up failed: User ID is null"
                                     }
                                 } catch (e: Exception) {
-                                    errorMessage = e.message ?: "An unexpected error occurred"
+                                    val message = e.message ?: ""
+                                    if (message.contains("User already registered", ignoreCase = true) || 
+                                        message.contains("already exists", ignoreCase = true)) {
+                                        errorMessage = "email is already sign in"
+                                    } else {
+                                        errorMessage = e.message ?: "An unexpected error occurred"
+                                    }
                                 } finally {
                                     isLoading = false
                                 }
