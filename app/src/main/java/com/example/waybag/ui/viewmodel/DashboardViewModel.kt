@@ -1,5 +1,6 @@
 package com.example.waybag.ui.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.waybag.data.model.BagScan
@@ -13,7 +14,6 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 import com.example.waybag.data.model.UserProfile
-import io.github.jan.supabase.postgrest.query.Columns
 
 data class ChartEntry(
     val value: Float,    // Normalized 0.0 to 1.0 for UI bar size
@@ -51,6 +51,7 @@ class DashboardViewModel : ViewModel() {
                 val profile = supabase.from("profiles").select {
                     filter { eq("id", user.id) }
                 }.decodeSingleOrNull<UserProfile>()
+                Log.d("Dashboard", "Refreshed profile: $profile")
                 _userProfile.value = profile
 
                 // Fetch Scans

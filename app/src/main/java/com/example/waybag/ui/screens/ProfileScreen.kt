@@ -3,7 +3,6 @@ package com.example.waybag.ui.screens
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -149,42 +148,33 @@ fun ProfileScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
                     
-                    // Birthday (Read-only as per typical profile view unless specified otherwise)
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            text = "Birthday",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Premium_Gray,
-                            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-                        )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .border(
-                                    width = 1.dp,
-                                    color = WayBag_Lime.copy(alpha = 0.3f),
-                                    shape = RoundedCornerShape(16.dp)
-                                )
-                                .padding(horizontal = 16.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            Text(
-                                text = state.userProfile?.birthday ?: "Not set",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = Premium_Gray.copy(alpha = 0.6f)
-                            )
-                        }
-                    }
+                    // Birthday
+                    WayBagTextField(
+                        value = state.birthday,
+                        onValueChange = { viewModel.onBirthdayChange(it) },
+                        label = "Birthday",
+                        placeholder = "DD/MM/YYYY",
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    WayBagTextField(
+                        value = state.currentPassword,
+                        onValueChange = { viewModel.onCurrentPasswordChange(it) },
+                        label = "Current Password",
+                        placeholder = "Required to change password/email",
+                        isPassword = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
                     Spacer(modifier = Modifier.height(16.dp))
 
                     WayBagTextField(
                         value = state.password,
                         onValueChange = { viewModel.onPasswordChange(it) },
-                        label = "New Password (Optional)",
-                        placeholder = "Enter new password",
+                        label = "New Password",
+                        placeholder = "Leave blank to keep current",
                         isPassword = true,
                         modifier = Modifier.fillMaxWidth()
                     )

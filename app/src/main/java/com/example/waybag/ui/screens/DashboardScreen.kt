@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.TrackChanges
@@ -16,15 +17,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import com.example.waybag.data.supabase
 import io.github.jan.supabase.auth.auth
 import com.example.waybag.ui.components.GlassBackground
@@ -58,6 +63,20 @@ fun DashboardScreen(
     val monthlyData by viewModel.monthlyData.collectAsState()
     
     var currentTab by remember { mutableStateOf(DashboardTab.Home) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Refresh when tab changes OR when returning to this screen from Profile
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshData()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     LaunchedEffect(currentTab) {
         if (currentTab == DashboardTab.Home) {
@@ -126,49 +145,55 @@ fun DashboardHeader(
         modifier = Modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .height(80.dp)
-            .background(Color.White.copy(alpha = 0.5f))
-            .drawBehindBorder(bottom = true),
+            .height(90.dp)
+            .padding(horizontal = 20.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Exit Button
-            TextButton(onClick = onExitClick) {
-                Text(
-                    text = "Exit",
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        color = Color.Red.copy(alpha = 0.7f),
-                        fontWeight = FontWeight.Bold
-                    )
+            // Refined Exit Button
+            IconButton(
+                onClick = onExitClick,
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.05f))
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Exit",
+                    tint = Color.Black.copy(alpha = 0.7f),
+                    modifier = Modifier.size(20.dp)
                 )
             }
             
             // Centered Logo and Wordmark
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                WayBagLogo(modifier = Modifier.size(40.dp))
-                Spacer(modifier = Modifier.width(8.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                WayBagLogo(modifier = Modifier.size(36.dp))
+                Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = "WayBag",
                     style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 0.5.sp,
+                        color = Premium_Gray
                     )
                 )
             }
             
-            // Sophisticated Avatar Icon
+            // Profile Avatar
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(44.dp)
                     .clip(CircleShape)
-                    .background(Color.LightGray.copy(alpha = 0.3f))
-                    .border(1.dp, Color.White.copy(alpha = 0.5f), CircleShape)
+                    .background(Color.White.copy(alpha = 0.2f))
+                    .border(1.5.dp, Color.White.copy(alpha = 0.5f), CircleShape)
                     .clickable { onProfileClick() },
                 contentAlignment = Alignment.Center
             ) {
@@ -180,20 +205,18 @@ fun DashboardHeader(
                         contentScale = androidx.compose.ui.layout.ContentScale.Crop
                     )
                 } else {
-                    Text("👤", fontSize = 24.sp)
+                    Text("👤", fontSize = 20.sp)
                 }
                 
-                // Overlay "+" indicator
+                // Small indicator
                 Box(
                     modifier = Modifier
-                        .size(16.dp)
+                        .size(12.dp)
                         .clip(CircleShape)
                         .background(WayBag_Lime)
-                        .align(Alignment.BottomEnd),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("+", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                }
+                        .align(Alignment.BottomEnd)
+                        .border(1.dp, Color.White, CircleShape)
+                )
             }
         }
     }
@@ -340,13 +363,21 @@ fun DashboardBottomNav(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp)
+            .padding(horizontal = 20.dp, vertical = 24.dp)
             .navigationBarsPadding()
     ) {
-        ThinGlassPanel(
+        // Pure Floating Glass Container
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(80.dp)
+                .height(68.dp)
+                .clip(RoundedCornerShape(30.dp))
+                .background(Color.White.copy(alpha = 0.15f)) // Ultra-thin glass
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(30.dp)
+                )
         ) {
             Row(
                 modifier = Modifier.fillMaxSize(),
@@ -383,26 +414,49 @@ fun RowScope.BottomNavItem(
     active: Boolean,
     onClick: () -> Unit
 ) {
-    Column(
+    val contentColor = if (active) Color(0xFF4B8B00) else Premium_Gray.copy(alpha = 0.5f)
+    val bgColor = if (active) WayBag_Lime.copy(alpha = 0.3f) else Color.Transparent
+
+    Box(
         modifier = Modifier
             .weight(1f)
-            .clickable(onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .fillMaxHeight()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null, 
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = if (active) WayBag_Lime else Premium_Gray,
-            modifier = Modifier.size(28.dp)
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = label,
-            fontSize = 12.sp,
-            color = if (active) WayBag_Lime else Premium_Gray,
-            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal
-        )
+        // The Pill Background
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .background(bgColor)
+                .padding(horizontal = 14.dp, vertical = 8.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = contentColor,
+                    modifier = Modifier.size(24.dp)
+                )
+                if (active) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = label,
+                        fontSize = 13.sp,
+                        color = contentColor,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
     }
 }
 

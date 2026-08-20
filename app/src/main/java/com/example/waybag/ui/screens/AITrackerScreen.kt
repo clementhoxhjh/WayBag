@@ -38,6 +38,7 @@ import com.example.waybag.data.model.BagScan
 import com.example.waybag.ui.components.GlassBackground
 import com.example.waybag.ui.components.ThinGlassPanel
 import com.example.waybag.ui.theme.WayBag_Lime
+import com.example.waybag.ui.theme.Premium_Gray
 import com.example.waybag.ui.viewmodel.AITrackerViewModel
 import com.example.waybag.ui.viewmodel.AITrackerState
 import androidx.compose.material.icons.filled.Warning
@@ -111,26 +112,82 @@ fun PendingScansList(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp)
+            .padding(horizontal = 20.dp)
     ) {
+        Spacer(modifier = Modifier.height(24.dp))
         Text(
             text = "Select a Scan to Validate",
             style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.ExtraBold,
+            color = Premium_Gray
         )
         Text(
             text = "You need to scan a matching receipt within 20 mins of the QR scan.",
             style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray
+            color = Color.Gray.copy(alpha = 0.8f)
         )
         
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(32.dp))
         
         if (scans.isEmpty()) {
-            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("No pending scans found.", color = Color.Gray)
-                    TextButton(onClick = onRefresh) { Text("Refresh") }
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth(), 
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    // Illustration Placeholder / Branded Icon
+                    Box(
+                        modifier = Modifier
+                            .size(100.dp)
+                            .clip(CircleShape)
+                            .background(WayBag_Lime.copy(alpha = 0.1f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Receipt,
+                            contentDescription = null,
+                            tint = WayBag_Lime,
+                            modifier = Modifier.size(48.dp)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    Text(
+                        text = "No pending scans found.",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.DarkGray
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Scan a QR code to display pending items.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                    
+                    Spacer(modifier = Modifier.height(32.dp))
+                    
+                    // Branded Refresh Button
+                    Button(
+                        onClick = onRefresh,
+                        modifier = Modifier
+                            .height(54.dp)
+                            .padding(horizontal = 24.dp),
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(containerColor = WayBag_Lime),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
+                    ) {
+                        Text(
+                            "Refresh", 
+                            color = Color.Black, 
+                            fontWeight = FontWeight.ExtraBold,
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
                 }
             }
         } else {

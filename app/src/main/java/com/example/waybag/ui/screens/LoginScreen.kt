@@ -15,6 +15,8 @@ import com.example.waybag.ui.theme.Premium_Gray
 import com.example.waybag.data.supabase
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
+import io.github.jan.supabase.postgrest.from
+import androidx.compose.foundation.shape.RoundedCornerShape
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.rememberSaveable
 
@@ -27,6 +29,22 @@ fun LoginScreen(
 ) {
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
+    var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
+
+    if (errorMessage != null) {
+        AlertDialog(
+            onDismissRequest = { errorMessage = null },
+            confirmButton = {
+                TextButton(onClick = { errorMessage = null }) {
+                    Text("OK", color = Color.Red)
+                }
+            },
+            title = { Text("Login Error", color = Color.Red) },
+            text = { Text(errorMessage!!) },
+            shape = RoundedCornerShape(28.dp),
+            containerColor = Color.White
+        )
+    }
 
     GlassBackground {
         Scaffold(
@@ -94,6 +112,10 @@ fun LoginScreen(
                 WayBagButton(
                     text = if (isLoading) "Logging in..." else "Login",
                     onClick = {
+                        if (email.isBlank() || password.isBlank()) {
+                            errorMessage = "Please enter both email and password"
+                            return@WayBagButton
+                        }
                         isLoading = true
                         scope.launch {
                             try {
@@ -103,7 +125,29 @@ fun LoginScreen(
                                 }
                                 onLoginClick()
                             } catch (e: Exception) {
-                                // Handle error
+                                val message = e.message ?: ""
+                                when {
+                                    message.contains("Invalid login credentials", ignoreCase = true) -> {
+                                        // To distinguish between "email not found" and "wrong password",
+                                        // we check if the user exists in our profiles table.
+                                        try {
+                                            val userExists = supabase.from("profiles").select {
+                                                filter { eq("email", email) }
+                                            }.decodeList<com.example.waybag.data.model.UserProfile>().isNotEmpty()
+                                            
+                                            if (userExists) {
+                                                errorMessage = "password error"
+                                            } else {
+                                                errorMessage = "email haven't sign in, please go to sign in, tq"
+                                            }
+                                        } catch (dbEx: Exception) {
+                                            errorMessage = "password error" // Fallback if DB check fails
+                                        }
+                                    }
+                                    else -> {
+                                        errorMessage = e.localizedMessage ?: "An unexpected error occurred"
+                                    }
+                                }
                             } finally {
                                 isLoading = false
                             }

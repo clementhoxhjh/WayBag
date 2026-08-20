@@ -55,8 +55,9 @@ fun WayBagNavHost() {
         composable(Screen.Dashboard.route) {
             DashboardScreen(
                 onExitClick = {
-                    navController.navigate(Screen.Login.route) {
-                        popUpTo(Screen.Dashboard.route) { inclusive = true }
+                    // Navigate back to Welcome screen and clear the entire history
+                    navController.navigate(Screen.Welcome.route) {
+                        popUpTo(0) { inclusive = true }
                     }
                 },
                 onProfileClick = {
