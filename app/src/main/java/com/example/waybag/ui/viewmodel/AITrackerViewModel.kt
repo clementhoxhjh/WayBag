@@ -118,17 +118,18 @@ class AITrackerViewModel : ViewModel() {
 
                     val prompt = """
                         SYSTEM: MALAYSIAN RETAIL AUDIT EXPERT.
-                        TASK: Extract data from the provided receipt image. 
+                        TASK: Extract EXACT data from the receipt image.
                         
-                        CRITICAL FORMAT RULES:
-                        - items: MUST be an array of PLAIN STRINGS. Example: ["MILK", "BREAD"]. DO NOT use objects.
-                        - regNo: Look for 'Registration Number', 'Co. No', 'Company No', or 'SSM No'.
+                        CRITICAL INSTRUCTIONS:
+                        - DO NOT GUESS. If time is missing, return "MISSING".
+                        - timestamp: Search very carefully for date/time. Look for formats like DD/MM/YYYY, DD-MM-YY, YYYY/MM/DD. Check top, bottom, and near the invoice number.
+                        - regNo: Registration Number, SSM No, or Co. No.
                         
-                        RETURN ONLY JSON:
+                        OUTPUT ONLY JSON:
                         { 
-                          "storeName": "Name", 
-                          "regNo": "Number", 
-                          "timestamp": "YYYY-MM-DDTHH:MM:SS", 
+                          "storeName": "Exact Shop Name", 
+                          "regNo": "Reg Number", 
+                          "timestamp": "ISO_TIMESTAMP_OR_MISSING", 
                           "totalAmount": 0.00, 
                           "hasPlasticBag": Boolean, 
                           "items": ["Item1", "Item2"] 
@@ -153,8 +154,8 @@ class AITrackerViewModel : ViewModel() {
                                 }
                             }
                             putJsonObject("generationConfig") {
-                                put("temperature", 0.1)
-                                put("topP", 0.95)
+                                put("temperature", 0.0) // Absolute consistency
+                                put("topP", 1.0)
                                 put("maxOutputTokens", 2048)
                             }
                         })
@@ -199,7 +200,9 @@ class AITrackerViewModel : ViewModel() {
             if (analysis.storeName.isBlank() || analysis.storeName.length < 2) missingFields.add("Shop Name")
             if (analysis.regNo.isBlank() || analysis.regNo.lowercase().contains("not found")) missingFields.add("Registration Number")
             if (analysis.totalAmount <= 0) missingFields.add("Total Amount")
-            if (analysis.timestamp.isBlank()) missingFields.add("Receipt Time")
+            if (analysis.timestamp.isBlank() || analysis.timestamp.contains("MISSING", ignoreCase = true)) {
+                missingFields.add("Receipt Time")
+            }
 
             // 1. Check for Duplicate Receipt (Same RegNo + Same Total + Same Day)
             try {
@@ -231,7 +234,7 @@ class AITrackerViewModel : ViewModel() {
 
             // 3. Check for missing data
             if (missingFields.isNotEmpty()) {
-                val reason = "FAILED: Missing ${missingFields.joinToString(", ")}."
+                val reason = "FAILED: Missing information (${missingFields.joinToString(", ")}). Please ensure the receipt is clear, not blurry, and contains full details."
                 _state.update { it.copy(validationMessage = reason) }
                 saveResultsToDatabaseInScope(scan, analysis, "failed")
                 return@launch
@@ -246,7 +249,7 @@ class AITrackerViewModel : ViewModel() {
                     val diffMillis = Math.abs(receiptDate.time - scanDate.time)
                     val diffMins = diffMillis / (60 * 1000)
                     if (diffMins > 20) {
-                        _state.update { it.copy(validationMessage = "FAILED: Time gap ${diffMins}m too large.") }
+                        _state.update { it.copy(validationMessage = "FAILED: EXCEEDED 20-min window (Gap: ${diffMins}m).") }
                         saveResultsToDatabaseInScope(scan, analysis, "failed")
                         return@launch
                     }
@@ -268,6 +271,7 @@ class AITrackerViewModel : ViewModel() {
                 set("regNo", analysis.regNo)
                 set("totalAmount", analysis.totalAmount)
                 set("itemsJson", itemsJson)
+                set("receiptTimestamp", analysis.timestamp) // Save the receipt time
             }) {
                 filter { eq("id", scan.id ?: 0L) }
             }
