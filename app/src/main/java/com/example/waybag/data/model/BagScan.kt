@@ -12,7 +12,8 @@ data class BagScan(
     val status: String = "pending", // "pending", "completed", "failed"
     // New fields for Receipt Validation
     val storeName: String? = null,
-    val regNo: String? = null, // Changed from gstId to regNo
+    val regNo: String? = null,
     val totalAmount: Double? = null,
-    val itemsJson: String? = null // Store list as JSON string
+    val itemsJson: String? = null,
+    val receiptTimestamp: String? = null
 )
