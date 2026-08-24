@@ -8,7 +8,7 @@ data class BagScan(
     val id: Long? = null,
     val userId: String,
     val bagUniqueId: String,
-    val timestamp: String, // T_QR
+    val scanQR: String, // Renamed from timestamp
     val status: String = "pending", // "pending", "completed", "failed"
     // New fields for Receipt Validation
     val storeName: String? = null,

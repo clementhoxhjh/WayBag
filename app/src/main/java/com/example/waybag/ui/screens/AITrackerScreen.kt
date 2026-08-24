@@ -209,7 +209,7 @@ fun PendingScansList(
                             Spacer(modifier = Modifier.width(16.dp))
                             Column {
                                 Text(text = "Bag #${scan.bagUniqueId}", fontWeight = FontWeight.Bold)
-                                Text(text = "Scanned at: ${scan.timestamp.take(16).replace('T', ' ')}", fontSize = 12.sp, color = Color.Gray)
+                                Text(text = "Scanned at: ${scan.scanQR.take(16).replace('T', ' ')}", fontSize = 12.sp, color = Color.Gray)
                             }
                         }
                     }

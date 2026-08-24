@@ -92,7 +92,7 @@ class DashboardViewModel : ViewModel() {
         scans.forEach { scan ->
             try {
                 // Supabase timestamp is often ISO 8601
-                val date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(scan.timestamp.take(10))
+                val date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(scan.scanQR.take(10))
                 if (date != null) {
                     calendar.time = date
                     val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
@@ -120,7 +120,7 @@ class DashboardViewModel : ViewModel() {
         
         scans.forEach { scan ->
             try {
-                val month = scan.timestamp.substring(5, 7).toInt() // 2024-01-20 -> 01
+                val month = scan.scanQR.substring(5, 7).toInt() // 2024-01-20 -> 01
                 if (month in 1..3) {
                     monthlyCounts[month - 1] += 1f
                 }

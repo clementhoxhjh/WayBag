@@ -397,7 +397,7 @@ fun ScanHistoryScreen(onBack: () -> Unit) {
                     val response = supabase.from("bag_scans")
                         .select {
                             filter { eq("userId", user.id) }
-                            order("timestamp", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                            order("scanQR", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
                         }
                     val allScans = response.decodeList<BagScan>()
                     
@@ -405,7 +405,7 @@ fun ScanHistoryScreen(onBack: () -> Unit) {
                     val now = Date()
                     val expiredIds = allScans.filter { scan ->
                         if (scan.status.lowercase() == "pending") {
-                            val scanDate = DateUtils.parseIsoTimestamp(scan.timestamp)
+                            val scanDate = DateUtils.parseIsoTimestamp(scan.scanQR)
                             val isExpired = scanDate != null && (now.time - scanDate.time) > 20 * 60 * 1000
                             isExpired
                         } else false
@@ -425,7 +425,7 @@ fun ScanHistoryScreen(onBack: () -> Unit) {
                             val refreshedResponse = supabase.from("bag_scans")
                                 .select {
                                     filter { eq("userId", user.id) }
-                                    order("timestamp", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                                    order("scanQR", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
                                 }
                             scans = refreshedResponse.decodeList<BagScan>()
                         } catch (e: Exception) {
@@ -491,18 +491,18 @@ fun ScanHistoryScreen(onBack: () -> Unit) {
 
 @Composable
 fun HistoryItem(scan: BagScan) {
-    val displayTime = remember(scan.timestamp) {
-        val date = DateUtils.parseIsoTimestamp(scan.timestamp)
+    val displayTime = remember(scan.scanQR) {
+        val date = DateUtils.parseIsoTimestamp(scan.scanQR)
         if (date != null) {
             SimpleDateFormat("MMM dd, hh:mm a", Locale.getDefault()).format(date)
         } else {
-            scan.timestamp.take(16).replace('T', ' ')
+            scan.scanQR.take(16).replace('T', ' ')
         }
     }
 
-    val isExpired = remember(scan.timestamp, scan.status) {
+    val isExpired = remember(scan.scanQR, scan.status) {
         if (scan.status.lowercase() == "pending") {
-            val scanDate = DateUtils.parseIsoTimestamp(scan.timestamp)
+            val scanDate = DateUtils.parseIsoTimestamp(scan.scanQR)
             scanDate != null && (System.currentTimeMillis() - scanDate.time) > 20 * 60 * 1000
         } else false
     }
@@ -581,7 +581,7 @@ private suspend fun recordScan(barcodeValue: String): String? {
                 val failedScan = BagScan(
                     userId = user.id,
                     bagUniqueId = uniqueId,
-                    timestamp = timestamp,
+                    scanQR = timestamp,
                     status = "failed"
                 )
                 supabase.from("bag_scans").insert(failedScan)
@@ -593,7 +593,7 @@ private suspend fun recordScan(barcodeValue: String): String? {
             val scan = BagScan(
                 userId = user.id,
                 bagUniqueId = uniqueId,
-                timestamp = timestamp,
+                scanQR = timestamp,
                 status = "pending"
             )
             supabase.from("bag_scans").insert(scan)

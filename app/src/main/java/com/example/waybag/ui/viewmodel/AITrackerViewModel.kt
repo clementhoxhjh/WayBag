@@ -122,13 +122,14 @@ class AITrackerViewModel : ViewModel() {
                         
                         CRITICAL INSTRUCTIONS:
                         - DO NOT GUESS. If time is missing, return "MISSING".
-                        - timestamp: Search very carefully for date/time. Look for formats like DD/MM/YYYY, DD-MM-YY, YYYY/MM/DD. Check top, bottom, and near the invoice number.
-                        - regNo: Registration Number, SSM No, or Co. No.
+                        - timestamp: Search very carefully for date/time. Combine with HH:MM or HH:MM:SS.
+                        - regNo: EXTRACT THE FULL REGISTRATION NUMBER. 
+                          Example: "202401012345 (1309876-V)". MUST INCLUDE THE PARENTHESES AND ALL CHARACTERS.
                         
                         OUTPUT ONLY JSON:
                         { 
                           "storeName": "Exact Shop Name", 
-                          "regNo": "Reg Number", 
+                          "regNo": "FULL_NUMBER_WITH_PARENTHESES", 
                           "timestamp": "ISO_TIMESTAMP_OR_MISSING", 
                           "totalAmount": 0.00, 
                           "hasPlasticBag": Boolean, 
@@ -213,7 +214,7 @@ class AITrackerViewModel : ViewModel() {
                         eq("status", "completed")
                     }
                 }.decodeList<BagScan>().count { 
-                    it.timestamp.take(10) == analysis.timestamp.take(10) 
+                    it.scanQR.take(10) == analysis.timestamp.take(10) 
                 }
 
                 if (duplicateCount > 0) {
@@ -243,7 +244,7 @@ class AITrackerViewModel : ViewModel() {
             // 4. Time Window Check (Production Logic: 20 mins)
             try {
                 val receiptDate = parseSimpleIso(analysis.timestamp)
-                val scanDate = DateUtils.parseIsoTimestamp(scan.timestamp)
+                val scanDate = DateUtils.parseIsoTimestamp(scan.scanQR)
 
                 if (receiptDate != null && scanDate != null) {
                     val diffMillis = Math.abs(receiptDate.time - scanDate.time)
