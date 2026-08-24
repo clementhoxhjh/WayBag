@@ -571,10 +571,10 @@ private suspend fun recordScan(barcodeValue: String): String? {
         val validBag = response.decodeSingleOrNull<ValidBag>()
         val user = supabase.auth.currentUserOrNull()
         
-        // Use a more standard format for local generation
+        // Use local timezone format (e.g. +0800) for easier reading in DB
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.US)
-        sdf.timeZone = TimeZone.getTimeZone("UTC")
         val timestamp = sdf.format(Date())
+        Log.d("QRScan", "Recording with local timestamp: $timestamp")
 
         if (validBag == null) {
             if (user != null) {

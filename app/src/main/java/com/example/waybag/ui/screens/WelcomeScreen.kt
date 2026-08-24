@@ -9,8 +9,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.waybag.ui.components.*
 import com.example.waybag.ui.theme.Premium_Gray
 import kotlinx.coroutines.delay
@@ -59,8 +61,11 @@ fun WelcomeScreen(
                 enter = fadeIn(tween(1000, 300)) + slideInVertically(tween(1000, 300)) { 60 }
             ) {
                 Text(
-                    text = "Track your climate contribution with AI. Record QR scans and steps to see your impact.",
-                    style = MaterialTheme.typography.bodyLarge,
+                    text = "The smartest way to reuse. Track your plastic-free journey and watch your green impact grow.",
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        lineHeight = 24.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
                     color = Premium_Gray,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(horizontal = 16.dp)

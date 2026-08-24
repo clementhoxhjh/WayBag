@@ -63,7 +63,31 @@ fun DashboardScreen(
     val monthlyData by viewModel.monthlyData.collectAsState()
     
     var currentTab by remember { mutableStateOf(DashboardTab.Home) }
+    var showExitDialog by remember { mutableStateOf(false) }
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            title = { Text("Exit WayBag?") },
+            text = { Text("Do you want to exit?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showExitDialog = false
+                    onExitClick()
+                }) {
+                    Text("Yes", color = Color.Red, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExitDialog = false }) {
+                    Text("No", color = Premium_Gray)
+                }
+            },
+            containerColor = Color.White,
+            shape = RoundedCornerShape(28.dp)
+        )
+    }
 
     // Refresh when tab changes OR when returning to this screen from Profile
     DisposableEffect(lifecycleOwner) {
@@ -89,7 +113,7 @@ fun DashboardScreen(
             topBar = { 
                 DashboardHeader(
                     userProfile = userProfile,
-                    onExitClick = onExitClick,
+                    onExitClick = { showExitDialog = true },
                     onProfileClick = onProfileClick
                 ) 
             },
@@ -154,19 +178,18 @@ fun DashboardHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Refined Exit Button
-            IconButton(
+            // Refined Exit Button - Changed to Red Text
+            TextButton(
                 onClick = onExitClick,
                 modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.05f))
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.Red.copy(alpha = 0.05f))
             ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Exit",
-                    tint = Color.Black.copy(alpha = 0.7f),
-                    modifier = Modifier.size(20.dp)
+                Text(
+                    text = "Exit",
+                    color = Color.Red.copy(alpha = 0.8f),
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
                 )
             }
             
