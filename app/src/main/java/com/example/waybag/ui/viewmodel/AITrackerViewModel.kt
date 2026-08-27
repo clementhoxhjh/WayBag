@@ -11,6 +11,7 @@ import com.example.waybag.data.supabase
 import com.example.waybag.utils.DateUtils
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.storage.storage
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.android.*
@@ -26,8 +27,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
+import kotlinx.serialization.encodeToString
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
@@ -181,7 +182,23 @@ class AITrackerViewModel : ViewModel() {
 
                 if (result != null) {
                     _state.update { it.copy(analysisResult = result) }
-                    validateAndSubmit(result, selectedScan)
+                    
+                    // Upload the receipt image
+                    val receiptUrl = withContext(Dispatchers.IO) {
+                        try {
+                            val fileName = "receipt_${selectedScan.id}_${System.currentTimeMillis()}.jpg"
+                            val bucket = supabase.storage.from("receipts")
+                            val outputStream = ByteArrayOutputStream()
+                            bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
+                            bucket.upload(fileName, outputStream.toByteArray()) { upsert = true }
+                            bucket.publicUrl(fileName)
+                        } catch (e: Exception) {
+                            Log.e("AITracker", "Receipt upload failed", e)
+                            null
+                        }
+                    }
+                    
+                    validateAndSubmit(result, selectedScan, receiptUrl)
                 } else {
                     _state.update { it.copy(error = "AI failed to audit receipt. Ensure info is visible.") }
                 }
@@ -193,7 +210,7 @@ class AITrackerViewModel : ViewModel() {
         }
     }
 
-    private fun validateAndSubmit(analysis: ReceiptAnalysis, scan: BagScan) {
+    private fun validateAndSubmit(analysis: ReceiptAnalysis, scan: BagScan, receiptImageUrl: String? = null) {
         viewModelScope.launch {
             Log.d("AITracker", "Validating: $analysis")
 
@@ -205,21 +222,18 @@ class AITrackerViewModel : ViewModel() {
                 missingFields.add("Receipt Time")
             }
 
-            // 1. Check for Duplicate Receipt (Same RegNo + Same Total + Same Day)
+            // 1. Check for Duplicate Receipt (Strictly by regNo as requested)
             try {
                 val duplicateCount = supabase.from("bag_scans").select {
                     filter {
                         eq("regNo", analysis.regNo)
-                        eq("totalAmount", analysis.totalAmount)
                         eq("status", "completed")
                     }
-                }.decodeList<BagScan>().count { 
-                    it.scanQR.take(10) == analysis.timestamp.take(10) 
-                }
+                }.decodeList<BagScan>().size
 
                 if (duplicateCount > 0) {
-                    _state.update { it.copy(validationMessage = "FAILED: This receipt has already been used.") }
-                    saveResultsToDatabaseInScope(scan, analysis, "failed")
+                    _state.update { it.copy(validationMessage = "FAILED: This receipt (RegNo: ${analysis.regNo}) has already been recorded.") }
+                    saveResultsToDatabaseInScope(scan, analysis, "failed", receiptImageUrl)
                     return@launch
                 }
             } catch (e: Exception) {
@@ -229,7 +243,7 @@ class AITrackerViewModel : ViewModel() {
             // 2. Check for plastic bag
             if (analysis.hasPlasticBag) {
                 _state.update { it.copy(validationMessage = "FAILED: Plastic bag charge detected.") }
-                saveResultsToDatabaseInScope(scan, analysis, "failed")
+                saveResultsToDatabaseInScope(scan, analysis, "failed", receiptImageUrl)
                 return@launch
             }
 
@@ -237,7 +251,7 @@ class AITrackerViewModel : ViewModel() {
             if (missingFields.isNotEmpty()) {
                 val reason = "FAILED: Missing information (${missingFields.joinToString(", ")}). Please ensure the receipt is clear, not blurry, and contains full details."
                 _state.update { it.copy(validationMessage = reason) }
-                saveResultsToDatabaseInScope(scan, analysis, "failed")
+                saveResultsToDatabaseInScope(scan, analysis, "failed", receiptImageUrl)
                 return@launch
             }
 
@@ -251,7 +265,7 @@ class AITrackerViewModel : ViewModel() {
                     val diffMins = diffMillis / (60 * 1000)
                     if (diffMins > 20) {
                         _state.update { it.copy(validationMessage = "FAILED: EXCEEDED 20-min window (Gap: ${diffMins}m).") }
-                        saveResultsToDatabaseInScope(scan, analysis, "failed")
+                        saveResultsToDatabaseInScope(scan, analysis, "failed", receiptImageUrl)
                         return@launch
                     }
                 }
@@ -259,11 +273,11 @@ class AITrackerViewModel : ViewModel() {
 
             // Success Path
             _state.update { it.copy(validationMessage = "SUCCESS! Impact recorded.", isSuccess = true) }
-            saveResultsToDatabaseInScope(scan, analysis, "completed")
+            saveResultsToDatabaseInScope(scan, analysis, "completed", receiptImageUrl)
         }
     }
 
-    private suspend fun saveResultsToDatabaseInScope(scan: BagScan, analysis: ReceiptAnalysis, status: String) {
+    private suspend fun saveResultsToDatabaseInScope(scan: BagScan, analysis: ReceiptAnalysis, status: String, receiptImageUrl: String? = null) {
         try {
             val itemsJson = Json.encodeToString(analysis.items)
             supabase.from("bag_scans").update({
@@ -273,6 +287,7 @@ class AITrackerViewModel : ViewModel() {
                 set("totalAmount", analysis.totalAmount)
                 set("itemsJson", itemsJson)
                 set("receiptTimestamp", analysis.timestamp) // Save the receipt time
+                set("receiptImageUrl", receiptImageUrl) // Save the image URL
             }) {
                 filter { eq("id", scan.id ?: 0L) }
             }

@@ -14,8 +14,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
@@ -49,6 +51,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import com.example.waybag.ui.theme.WayBag_Lime
 import com.example.waybag.utils.DateUtils
+import coil.compose.AsyncImage
 
 @Composable
 fun QRScanScreen() {
@@ -386,6 +389,7 @@ fun ErrorState(message: String, onReset: () -> Unit) {
 fun ScanHistoryScreen(onBack: () -> Unit) {
     var scans by remember { mutableStateOf<List<BagScan>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var selectedScanDetail by remember { mutableStateOf<BagScan?>(null) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
@@ -482,15 +486,134 @@ fun ScanHistoryScreen(onBack: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(scans) { scan ->
-                    HistoryItem(scan)
+                    HistoryItem(
+                        scan = scan,
+                        onClick = {
+                            if (scan.status.lowercase() == "completed") {
+                                selectedScanDetail = scan
+                            }
+                        }
+                    )
                 }
             }
+        }
+
+        // Scan Detail Modal/Overlay
+        if (selectedScanDetail != null) {
+            ScanDetailView(
+                scan = selectedScanDetail!!,
+                onDismiss = { selectedScanDetail = null }
+            )
         }
     }
 }
 
 @Composable
-fun HistoryItem(scan: BagScan) {
+fun ScanDetailView(scan: BagScan, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = WayBag_Lime)
+            ) {
+                Text("Close", color = Color.Black)
+            }
+        },
+        title = { 
+            Text(
+                "Scan Details", 
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold 
+            ) 
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                DetailRow("Status", scan.status.uppercase(), WayBag_Lime)
+                
+                val scanTime = remember(scan.scanQR) {
+                    DateUtils.parseIsoTimestamp(scan.scanQR)?.let {
+                        SimpleDateFormat("MMM dd, yyyy hh:mm a", Locale.getDefault()).format(it)
+                    } ?: scan.scanQR
+                }
+                DetailRow("Scan QR Time", scanTime)
+
+                val receiptTime = remember(scan.receiptTimestamp) {
+                    if (scan.receiptTimestamp == null || scan.receiptTimestamp == "MISSING") {
+                        "MISSING"
+                    } else {
+                        // Attempt to format if it's ISO
+                        try {
+                            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
+                            val date = sdf.parse(scan.receiptTimestamp)
+                            SimpleDateFormat("MMM dd, yyyy hh:mm a", Locale.getDefault()).format(date!!)
+                        } catch (e: Exception) {
+                            scan.receiptTimestamp
+                        }
+                    }
+                }
+                DetailRow("Receipt Time", receiptTime)
+                
+                DetailRow("Reg No", scan.regNo ?: "N/A")
+                DetailRow("Store", scan.storeName ?: "N/A")
+
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Text(
+                    text = "Receipt Photo",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.Gray
+                )
+                
+                if (scan.receiptImageUrl != null) {
+                    AsyncImage(
+                        model = scan.receiptImageUrl,
+                        contentDescription = "Receipt Image",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(250.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, Color.LightGray, RoundedCornerShape(12.dp)),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp)
+                            .background(Color.LightGray.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("No photo available", color = Color.Gray)
+                    }
+                }
+            }
+        },
+        containerColor = Color.White,
+        shape = RoundedCornerShape(24.dp)
+    )
+}
+
+@Composable
+fun DetailRow(label: String, value: String, valueColor: Color = Color.Unspecified) {
+    Column {
+        Text(text = label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+        Text(
+            text = value, 
+            style = MaterialTheme.typography.bodyLarge, 
+            fontWeight = FontWeight.Bold,
+            color = valueColor
+        )
+    }
+}
+
+@Composable
+fun HistoryItem(scan: BagScan, onClick: () -> Unit) {
     val displayTime = remember(scan.scanQR) {
         val date = DateUtils.parseIsoTimestamp(scan.scanQR)
         if (date != null) {
@@ -514,7 +637,11 @@ fun HistoryItem(scan: BagScan) {
         else -> Color(0xFFFFB300) // Pending
     }
 
-    ThinGlassPanel(modifier = Modifier.fillMaxWidth()) {
+    ThinGlassPanel(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = scan.status.lowercase() == "completed") { onClick() }
+    ) {
         Row(
             modifier = Modifier
                 .padding(16.dp)
