@@ -1,10 +1,14 @@
 package com.example.waybag.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.waybag.ui.screens.*
+
+import com.example.waybag.data.supabase
+import io.github.jan.supabase.auth.auth
 
 sealed class Screen(val route: String) {
     object Welcome : Screen("welcome")
@@ -18,15 +22,25 @@ sealed class Screen(val route: String) {
 @Composable
 fun WayBagNavHost() {
     val navController = rememberNavController()
+    val currentUser = androidx.compose.runtime.remember { 
+        com.example.waybag.data.supabase.auth.currentUserOrNull() 
+    }
     
+    val startRoute = if (currentUser != null) Screen.Dashboard.route else Screen.Welcome.route
+
     NavHost(
         navController = navController,
-        startDestination = Screen.Welcome.route
+        startDestination = startRoute
     ) {
         composable(Screen.Welcome.route) {
             WelcomeScreen(
                 onLoginClick = { navController.navigate(Screen.Login.route) },
-                onSignUpClick = { navController.navigate(Screen.SignUp.route) }
+                onSignUpClick = { navController.navigate(Screen.SignUp.route) },
+                onAutoLogin = {
+                    navController.navigate(Screen.Dashboard.route) {
+                        popUpTo(Screen.Welcome.route) { inclusive = true }
+                    }
+                }
             )
         }
         composable(Screen.Login.route) {

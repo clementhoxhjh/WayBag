@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.TrackChanges
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,6 +55,7 @@ fun DashboardScreen(
     onProfileClick: () -> Unit,
     viewModel: DashboardViewModel = viewModel()
 ) {
+    val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
     val userProfile by viewModel.userProfile.collectAsState()
     val profileName = userProfile?.name ?: "User"
@@ -74,7 +76,14 @@ fun DashboardScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showExitDialog = false
-                    onExitClick()
+                    scope.launch {
+                        try {
+                            supabase.auth.signOut()
+                            onExitClick()
+                        } catch (e: Exception) {
+                            onExitClick() // Fallback
+                        }
+                    }
                 }) {
                     Text("Yes", color = Color.Red, fontWeight = FontWeight.Bold)
                 }
