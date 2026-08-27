@@ -205,20 +205,17 @@ class AITrackerViewModel : ViewModel() {
                 missingFields.add("Receipt Time")
             }
 
-            // 1. Check for Duplicate Receipt (Same RegNo + Same Total + Same Day)
+            // 1. Check for Duplicate Receipt (Strictly by regNo)
             try {
                 val duplicateCount = supabase.from("bag_scans").select {
                     filter {
                         eq("regNo", analysis.regNo)
-                        eq("totalAmount", analysis.totalAmount)
                         eq("status", "completed")
                     }
-                }.decodeList<BagScan>().count { 
-                    it.scanQR.take(10) == analysis.timestamp.take(10) 
-                }
+                }.decodeList<BagScan>().size
 
                 if (duplicateCount > 0) {
-                    _state.update { it.copy(validationMessage = "FAILED: This receipt has already been used.") }
+                    _state.update { it.copy(validationMessage = "FAILED: This receipt (RegNo: ${analysis.regNo}) has already been recorded.") }
                     saveResultsToDatabaseInScope(scan, analysis, "failed")
                     return@launch
                 }

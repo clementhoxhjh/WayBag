@@ -357,7 +357,7 @@ fun AnalyzingState() {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             CircularProgressIndicator(color = WayBag_Lime)
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Gemini AI is analyzing your receipt...", color = Color.White)
+            Text("AI is analyzing your receipt...", color = Color.White)
             Text("Checking for plastic bags & timestamps", fontSize = 12.sp, color = Color.Gray)
         }
     }
