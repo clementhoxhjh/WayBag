@@ -17,17 +17,27 @@ import com.example.waybag.ui.components.*
 import com.example.waybag.ui.theme.Premium_Gray
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.saveable.rememberSaveable
+import com.example.waybag.data.supabase
+import io.github.jan.supabase.auth.auth
 
 @Composable
 fun WelcomeScreen(
     onLoginClick: () -> Unit,
-    onSignUpClick: () -> Unit
+    onSignUpClick: () -> Unit,
+    onAutoLogin: () -> Unit
 ) {
     var visible by rememberSaveable { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     
     LaunchedEffect(Unit) {
-        delay(300)
-        visible = true
+        // Auto-login check: only if not already on the screen from a logout
+        val currentUser = supabase.auth.currentUserOrNull()
+        if (currentUser != null) {
+            onAutoLogin() // Use the dedicated auto-login path
+        } else {
+            delay(300)
+            visible = true
+        }
     }
 
     GlassBackground {
