@@ -68,12 +68,6 @@ fun WayBagNavHost() {
         }
         composable(Screen.Dashboard.route) {
             DashboardScreen(
-                onExitClick = {
-                    // Navigate back to Welcome screen and clear the entire history
-                    navController.navigate(Screen.Welcome.route) {
-                        popUpTo(0) { inclusive = true }
-                    }
-                },
                 onProfileClick = {
                     navController.navigate(Screen.Profile.route)
                 }
@@ -81,7 +75,13 @@ fun WayBagNavHost() {
         }
         composable(Screen.Profile.route) {
             ProfileScreen(
-                onBackClick = { navController.popBackStack() }
+                onBackClick = { navController.popBackStack() },
+                onLogoutClick = {
+                    // Navigate back to Welcome screen and clear the entire history
+                    navController.navigate(Screen.Welcome.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
             )
         }
     }

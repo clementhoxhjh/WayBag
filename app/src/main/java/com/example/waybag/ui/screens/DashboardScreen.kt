@@ -9,18 +9,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.TrackChanges
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -31,8 +29,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import com.example.waybag.data.supabase
-import io.github.jan.supabase.auth.auth
 import com.example.waybag.ui.components.GlassBackground
 import com.example.waybag.ui.components.ThinGlassPanel
 import com.example.waybag.ui.components.WayBagLogo
@@ -43,7 +39,13 @@ import com.example.waybag.ui.viewmodel.ChartEntry
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.waybag.data.model.UserProfile
-import com.example.waybag.ui.screens.AITrackerScreen
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import com.example.waybag.data.supabase
+import io.github.jan.supabase.auth.auth
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 enum class DashboardTab {
     Home, QRScan, AITracker
@@ -51,11 +53,9 @@ enum class DashboardTab {
 
 @Composable
 fun DashboardScreen(
-    onExitClick: () -> Unit,
     onProfileClick: () -> Unit,
     viewModel: DashboardViewModel = viewModel()
 ) {
-    val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
     val userProfile by viewModel.userProfile.collectAsState()
     val profileName = userProfile?.name ?: "User"
@@ -65,37 +65,12 @@ fun DashboardScreen(
     val monthlyData by viewModel.monthlyData.collectAsState()
     
     var currentTab by remember { mutableStateOf(DashboardTab.Home) }
-    var showExitDialog by remember { mutableStateOf(false) }
+    var showHistory by remember { mutableStateOf(false) }
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    if (showExitDialog) {
-        AlertDialog(
-            onDismissRequest = { showExitDialog = false },
-            title = { Text("Exit WayBag?") },
-            text = { Text("Do you want to exit?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showExitDialog = false
-                    scope.launch {
-                        try {
-                            supabase.auth.signOut()
-                            onExitClick()
-                        } catch (e: Exception) {
-                            onExitClick() // Fallback
-                        }
-                    }
-                }) {
-                    Text("Yes", color = Color.Red, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showExitDialog = false }) {
-                    Text("No", color = Premium_Gray)
-                }
-            },
-            containerColor = Color.White,
-            shape = RoundedCornerShape(28.dp)
-        )
+    if (showHistory) {
+        ScanHistoryScreen(onBack = { showHistory = false })
+        return
     }
 
     // Refresh when tab changes OR when returning to this screen from Profile
@@ -122,7 +97,7 @@ fun DashboardScreen(
             topBar = { 
                 DashboardHeader(
                     userProfile = userProfile,
-                    onExitClick = { showExitDialog = true },
+                    onHistoryClick = { showHistory = true },
                     onProfileClick = onProfileClick
                 ) 
             },
@@ -133,8 +108,8 @@ fun DashboardScreen(
                 ) 
             },
             containerColor = Color.Transparent
-        ) { padding ->
-            Box(modifier = Modifier.padding(padding)) {
+        ) { innerPadding: PaddingValues ->
+            Box(modifier = Modifier.padding(innerPadding)) {
                 when (currentTab) {
                     DashboardTab.Home -> {
                         Column(
@@ -149,8 +124,10 @@ fun DashboardScreen(
                                 profileName = profileName,
                                 totalScans = totalScans
                             )
-                            ClimateImpactPanel(
-                                weeklyData = weeklyData,
+                            WeeklyImpactPanel(
+                                weeklyData = weeklyData
+                            )
+                            MonthlyContributionPanel(
                                 monthlyData = monthlyData
                             )
                             Spacer(modifier = Modifier.height(100.dp))
@@ -171,7 +148,7 @@ fun DashboardScreen(
 @Composable
 fun DashboardHeader(
     userProfile: UserProfile?,
-    onExitClick: () -> Unit,
+    onHistoryClick: () -> Unit,
     onProfileClick: () -> Unit
 ) {
     Box(
@@ -187,21 +164,29 @@ fun DashboardHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Refined Exit Button - Changed to Red Text
+            // History Button - Replaces Exit App
             TextButton(
-                onClick = onExitClick,
+                onClick = onHistoryClick,
                 modifier = Modifier
-                    .height(44.dp)
+                    .height(50.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color.Red.copy(alpha = 0.05f))
+                    .background(WayBag_Lime.copy(alpha = 0.3f), RoundedCornerShape(25.dp)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, WayBag_Lime.copy(alpha = 0.5f))
             ) {
+                Icon(
+                    imageVector = Icons.Default.History,
+                    contentDescription = "History",
+                    tint = Color(0xFF4B8B00),
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "Exit",
-                    color = Color.Red.copy(alpha = 0.8f),
+                    text = "History",
+                    color = Color(0xFF4B8B00),
                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
                 )
             }
-            
+
             // Centered Logo and Wordmark
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -224,7 +209,7 @@ fun DashboardHeader(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.2f))
+                    .background(Color.White.copy(alpha = 1f))
                     .border(1.5.dp, Color.White.copy(alpha = 0.5f), CircleShape)
                     .clickable { onProfileClick() },
                 contentAlignment = Alignment.Center
@@ -239,7 +224,7 @@ fun DashboardHeader(
                 } else {
                     Text("👤", fontSize = 20.sp)
                 }
-                
+
                 // Small indicator
                 Box(
                     modifier = Modifier
@@ -256,34 +241,247 @@ fun DashboardHeader(
 
 @Composable
 fun ProfileStatsPanel(profileName: String, totalScans: Int) {
+    val totalCarbonSaved = totalScans * 1.58f
     ThinGlassPanel(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(24.dp)) {
             Text(
                 text = profileName,
                 style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold)
             )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Total Bag Usage",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Premium_Gray.copy(alpha = 0.7f)
-            )
+            Spacer(modifier = Modifier.height(20.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Usage Stat
+                Column {
+                    Text(
+                        text = "Total Bag Usage",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        text = totalScans.toString(),
+                        style = MaterialTheme.typography.displayLarge.copy(
+                            fontSize = 42.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                }
+
+                // Vertical Divider
+                Box(
+                    modifier = Modifier
+                        .height(40.dp)
+                        .width(1.dp)
+                        .background(Premium_Gray.copy(alpha = 0.1f))
+                )
+
+                // Carbon Stat
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "Total Carbon Saved",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        text = "${String.format(Locale.US, "%.2f", totalCarbonSaved)}kg",
+                        style = MaterialTheme.typography.displayLarge.copy(
+                            fontSize = 42.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF4B8B00)
+                        )
+                    )
+                }
+            }
+            
             Spacer(modifier = Modifier.height(16.dp))
-            Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = "Keep it up! Your usage helps the planet.",
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontWeight = FontWeight.Medium,
+                    color = Premium_Gray.copy(alpha = 0.7f)
+                )
+            )
+        }
+    }
+}
+
+@Composable
+fun WeeklyImpactPanel(
+    weeklyData: List<ChartEntry>
+) {
+    var dayOffset by remember { mutableIntStateOf(0) }
+
+    val calendar = remember(dayOffset) {
+        Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_YEAR, dayOffset)
+        }
+    }
+    val formattedDate = remember(calendar) {
+        SimpleDateFormat("dd MMM", Locale.ENGLISH).format(calendar.time)
+    }
+
+    val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
+    val selectedDayIndex = when (dayOfWeek) {
+        Calendar.MONDAY -> 0
+        Calendar.TUESDAY -> 1
+        Calendar.WEDNESDAY -> 2
+        Calendar.THURSDAY -> 3
+        Calendar.FRIDAY -> 4
+        Calendar.SATURDAY -> 5
+        Calendar.SUNDAY -> 6
+        else -> 6
+    }
+
+    val currentDayEntry = weeklyData.getOrNull(selectedDayIndex) ?: ChartEntry(0f, 0)
+    val todayUsage = currentDayEntry.quantity
+    val carbonFootprintReduced = todayUsage * 1.58f
+    val totalWeeklyUsage = remember(weeklyData) { weeklyData.sumOf { it.quantity } }
+    val totalWeeklyCarbonReduced = totalWeeklyUsage * 1.58f
+
+    ThinGlassPanel(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(24.dp)) {
+            Text(
+                text = "Weekly Carbon Footprint Reduced",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "${String.format(Locale.US, "%.2f", totalWeeklyCarbonReduced)}kg",
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFF4B8B00)
+                ),
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(140.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+                repeat(7) { index ->
+                    val entry = weeklyData.getOrNull(index) ?: ChartEntry(0f, 0)
+                    val isSelected = index == selectedDayIndex
+
+                    Column(
+                        modifier = Modifier.fillMaxHeight(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Bottom
+                    ) {
+                        Box(
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = Alignment.BottomCenter
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                if (entry.quantity > 0) {
+                                    Text(
+                                        text = entry.quantity.toString(),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) Color(0xFF4B8B00) else WayBag_Lime
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .width(20.dp)
+                                        .fillMaxHeight(if (entry.value > 0.05f) entry.value else 0.05f)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(
+                                            color = WayBag_Lime
+                                        )
+                                        .border(
+                                            width = if (isSelected) 2.dp else 1.dp,
+                                            color = if (isSelected) Color(0xFF4B8B00) else Color(0xFF4B8B00).copy(alpha = 0.3f),
+                                            shape = RoundedCornerShape(2.dp)
+                                        )
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = days[index],
+                            fontSize = 10.sp,
+                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Normal,
+                            color = if (isSelected) Color(0xFF4B8B00) else Premium_Gray
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = { dayOffset -= 1 },
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(Color.White.copy(alpha = 0.3f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                        contentDescription = "Previous Day",
+                        tint = Premium_Gray
+                    )
+                }
+
                 Text(
-                    text = totalScans.toString(),
-                    style = MaterialTheme.typography.displayLarge.copy(
-                        fontSize = 64.sp,
-                        fontWeight = FontWeight.Bold
+                    text = formattedDate,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = Premium_Gray
                     )
                 )
-                Spacer(modifier = Modifier.width(12.dp))
+
+                IconButton(
+                    onClick = { dayOffset += 1 },
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(Color.White.copy(alpha = 0.3f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = "Next Day",
+                        tint = Premium_Gray
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 Text(
-                    text = "keep it up!",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Medium
-                    ),
-                    modifier = Modifier.padding(bottom = 12.dp)
+                    text = "Today's WayBag Usage: $todayUsage times",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Premium_Gray
+                )
+                Text(
+                    text = "Carbon footprint reduced: ${String.format(Locale.US, "%.2f", carbonFootprintReduced)}kg",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Premium_Gray
                 )
             }
         }
@@ -291,84 +489,57 @@ fun ProfileStatsPanel(profileName: String, totalScans: Int) {
 }
 
 @Composable
-fun ClimateImpactPanel(
-    weeklyData: List<ChartEntry>,
-    monthlyData: List<ChartEntry>
-) {
+fun MonthlyContributionPanel(monthlyData: List<ChartEntry>) {
+    val months = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+    val totalMonthlyUsage = monthlyData.sumOf { it.quantity }
+    val totalMonthlyCarbonReduced = totalMonthlyUsage * 1.58f
+
     ThinGlassPanel(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(24.dp)) {
             Text(
-                text = "Steps of Carbon footprint taken",
+                text = "Total Contributions on WayBag",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            // Vertical Bar Chart
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(140.dp), // Increased height for numbers
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.Bottom
-            ) {
-                val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-                
-                // Ensure we always iterate 7 times to keep labels stable
-                repeat(7) { index ->
-                    val entry = weeklyData.getOrNull(index) ?: ChartEntry(0f, 0)
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        if (entry.quantity > 0) {
-                            Text(
-                                text = entry.quantity.toString(),
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = WayBag_Lime
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                        }
-                        Box(
-                            modifier = Modifier
-                                .width(20.dp)
-                                .fillMaxHeight(if (entry.value > 0.05f) entry.value else 0.05f)
-                                .border(1.dp, WayBag_Lime, RoundedCornerShape(2.dp))
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(days[index], fontSize = 10.sp, color = Premium_Gray)
-                    }
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(40.dp))
-            
+
+            Spacer(modifier = Modifier.height(6.dp))
+
             Text(
-                text = "Total Contributions on WayBag",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                text = "${String.format(Locale.US, "%.2f", totalMonthlyCarbonReduced)}kg Carbon Saved!",
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFF4B8B00)
+                ),
+                modifier = Modifier.align(Alignment.CenterHorizontally)
             )
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
+
+            Spacer(modifier = Modifier.height(20.dp))
+
             // Horizontal Bar Chart
-            val months = listOf("Jan", "Feb", "Mar")
-            
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                repeat(3) { index ->
-                    val entry = monthlyData.getOrNull(index) ?: ChartEntry(0f, 0)
+                repeat(monthlyData.size) { index ->
+                    val entry = monthlyData[index]
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(months[index], modifier = Modifier.width(40.dp), fontSize = 12.sp)
+                        Text(
+                            text = months[index % 12],
+                            modifier = Modifier.width(45.dp),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Premium_Gray
+                        )
                         Box(
                             modifier = Modifier
-                                .weight(1f) // Use weight to fill space
-                                .height(12.dp)
+                                .weight(1f)
+                                .height(16.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color.White.copy(alpha = 0.1f))
                         ) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth(if (entry.value > 0.02f) entry.value else 0.02f)
                                     .fillMaxHeight()
-                                    .clip(RoundedCornerShape(2.dp))
-                                    .background(WayBag_Lime.copy(alpha = 0.3f))
-                                    .border(0.5.dp, WayBag_Lime, RoundedCornerShape(2.dp))
+                                    .background(WayBag_Lime)
+                                    .border(1.dp, Color(0xFF4B8B00).copy(alpha = 0.3f))
                             )
                         }
                         if (entry.quantity > 0) {
@@ -376,8 +547,8 @@ fun ClimateImpactPanel(
                             Text(
                                 text = entry.quantity.toString(),
                                 fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = WayBag_Lime
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF4B8B00)
                             )
                         }
                     }
@@ -404,10 +575,10 @@ fun DashboardBottomNav(
                 .fillMaxWidth()
                 .height(68.dp)
                 .clip(RoundedCornerShape(30.dp))
-                .background(Color.White.copy(alpha = 0.15f)) // Ultra-thin glass
+                .background(Color.White.copy(alpha = 0.75f)) // Ultra-thin glass
                 .border(
                     width = 1.dp,
-                    color = Color.White.copy(alpha = 0.2f),
+                    color = Color.White.copy(alpha = 0.5f),
                     shape = RoundedCornerShape(30.dp)
                 )
         ) {
@@ -460,12 +631,14 @@ fun RowScope.BottomNavItem(
             ),
         contentAlignment = Alignment.Center
     ) {
-        // The Pill Background
+        // Uniform Pill Background
         Box(
             modifier = Modifier
+                .fillMaxWidth(0.85f)
+                .height(40.dp)
                 .clip(RoundedCornerShape(20.dp))
-                .background(bgColor)
-                .padding(horizontal = 14.dp, vertical = 8.dp)
+                .background(bgColor),
+            contentAlignment = Alignment.Center
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,

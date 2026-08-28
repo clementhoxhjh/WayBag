@@ -31,7 +31,7 @@ class DashboardViewModel : ViewModel() {
     private val _weeklyData = MutableStateFlow(List(7) { ChartEntry(0f, 0) })
     val weeklyData: StateFlow<List<ChartEntry>> = _weeklyData
 
-    private val _monthlyData = MutableStateFlow(List(3) { ChartEntry(0f, 0) }) 
+    private val _monthlyData = MutableStateFlow(List(12) { ChartEntry(0f, 0) }) 
     val monthlyData: StateFlow<List<ChartEntry>> = _monthlyData
 
     private val _isLoading = MutableStateFlow(false)
@@ -116,12 +116,12 @@ class DashboardViewModel : ViewModel() {
     }
 
     private fun processMonthlyData(scans: List<BagScan>) {
-        val monthlyCounts = FloatArray(3) { 0f } // Jan, Feb, Mar
+        val monthlyCounts = FloatArray(12) { 0f } // Jan to Dec
         
         scans.forEach { scan ->
             try {
                 val month = scan.scanQR.substring(5, 7).toInt() // 2024-01-20 -> 01
-                if (month in 1..3) {
+                if (month in 1..12) {
                     monthlyCounts[month - 1] += 1f
                 }
             } catch (e: Exception) {}

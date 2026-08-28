@@ -3,6 +3,7 @@ package com.example.waybag.ui.screens
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -26,15 +27,51 @@ import coil.compose.AsyncImage
 import com.example.waybag.ui.components.*
 import com.example.waybag.ui.viewmodel.ProfileViewModel
 import com.example.waybag.ui.theme.*
+import kotlinx.coroutines.launch
+import com.example.waybag.data.supabase
+import io.github.jan.supabase.auth.auth
 
 @Composable
 fun ProfileScreen(
     onBackClick: () -> Unit,
+    onLogoutClick: () -> Unit,
     viewModel: ProfileViewModel = viewModel()
 ) {
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
     val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    var showLogoutDialog by remember { mutableStateOf(false) }
+
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = { Text("Log Out?") },
+            text = { Text("Are you sure you want to log out from WayBag?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLogoutDialog = false
+                    scope.launch {
+                        try {
+                            supabase.auth.signOut()
+                            onLogoutClick()
+                        } catch (e: Exception) {
+                            onLogoutClick()
+                        }
+                    }
+                }) {
+                    Text("Log Out", color = Color.Red, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
+                    Text("Cancel", color = Premium_Gray)
+                }
+            },
+            containerColor = Color.White,
+            shape = RoundedCornerShape(28.dp)
+        )
+    }
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -109,7 +146,7 @@ fun ProfileScreen(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Text(
-                                        text = state.name.take(1).uppercase(),
+                                        text = if (state.name.isNotEmpty()) state.name.take(1).uppercase() else "U",
                                         style = MaterialTheme.typography.displaySmall,
                                         color = WayBag_Lime
                                     )
@@ -190,6 +227,22 @@ fun ProfileScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Logout Button
+            OutlinedButton(
+                onClick = { showLogoutDialog = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .background(Color.Red.copy(alpha = 0.05f), RoundedCornerShape(25.dp))
+                    .clip(RoundedCornerShape(12.dp)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.Red.copy(alpha = 0.3f))
+            ) {
+                Text("Log Out", fontWeight = FontWeight.Bold, color = Color.Red.copy(alpha = 0.8f),)
+            }
+
             if (state.error != null) {
                 Text(
                     text = state.error!!,
@@ -202,8 +255,8 @@ fun ProfileScreen(
             if (state.updateSuccess) {
                 Text(
                     text = "Profile updated successfully!",
-                    color = WayBag_Lime,
-                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Black,
+                    style = MaterialTheme.typography.headlineMedium,
                     modifier = Modifier.padding(top = 16.dp)
                 )
                 LaunchedEffect(Unit) {

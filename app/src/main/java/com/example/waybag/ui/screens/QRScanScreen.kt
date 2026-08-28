@@ -121,16 +121,6 @@ fun QRScanScreen() {
                 
                 QRScannerOverlay()
 
-                IconButton(
-                    onClick = { showHistory = true },
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 48.dp, end = 24.dp)
-                        .background(Color.Black.copy(alpha = 0.3f), CircleShape)
-                ) {
-                    Icon(Icons.Default.History, contentDescription = "History", tint = Color.White)
-                }
-                
                 if (isProcessing) {
                     Box(
                         modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)),
