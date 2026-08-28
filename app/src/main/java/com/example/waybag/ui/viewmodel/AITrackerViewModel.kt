@@ -280,6 +280,8 @@ class AITrackerViewModel : ViewModel() {
     private suspend fun saveResultsToDatabaseInScope(scan: BagScan, analysis: ReceiptAnalysis, status: String, receiptImageUrl: String? = null) {
         try {
             val itemsJson = Json.encodeToString(analysis.items)
+            val reason = if (status == "failed") _state.value.validationMessage else null
+            
             supabase.from("bag_scans").update({
                 set("status", status)
                 set("storeName", analysis.storeName)
@@ -288,6 +290,7 @@ class AITrackerViewModel : ViewModel() {
                 set("itemsJson", itemsJson)
                 set("receiptTimestamp", analysis.timestamp) // Save the receipt time
                 set("receiptImageUrl", receiptImageUrl) // Save the image URL
+                set("failureReason", reason) // Save why it failed
             }) {
                 filter { eq("id", scan.id ?: 0L) }
             }

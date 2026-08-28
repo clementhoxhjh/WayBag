@@ -16,5 +16,6 @@ data class BagScan(
     val totalAmount: Double? = null,
     val itemsJson: String? = null,
     val receiptTimestamp: String? = null,
-    val receiptImageUrl: String? = null
+    val receiptImageUrl: String? = null,
+    val failureReason: String? = null
 )

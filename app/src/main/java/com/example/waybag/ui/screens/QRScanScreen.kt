@@ -420,6 +420,7 @@ fun ScanHistoryScreen(onBack: () -> Unit) {
                         try {
                             supabase.from("bag_scans").update({
                                 set("status", "failed")
+                                set("failureReason", "EXPIRED (Over 20 mins)")
                             }) {
                                 filter {
                                     isIn("id", expiredIds)
@@ -489,7 +490,7 @@ fun ScanHistoryScreen(onBack: () -> Unit) {
                     HistoryItem(
                         scan = scan,
                         onClick = {
-                            if (scan.status.lowercase() == "completed") {
+                            if (scan.status.lowercase() != "pending") {
                                 selectedScanDetail = scan
                             }
                         }
@@ -534,8 +535,16 @@ fun ScanDetailView(scan: BagScan, onDismiss: () -> Unit) {
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                DetailRow("Status", scan.status.uppercase(), WayBag_Lime)
+                DetailRow(
+                    label = "Status", 
+                    value = scan.status.uppercase(), 
+                    valueColor = if (scan.status.lowercase() == "completed") WayBag_Lime else Color.Red
+                )
                 
+                if (scan.status.lowercase() == "failed" && scan.failureReason != null) {
+                    DetailRow("Failure Reason", scan.failureReason, Color.Red)
+                }
+
                 val scanTime = remember(scan.scanQR) {
                     DateUtils.parseIsoTimestamp(scan.scanQR)?.let {
                         SimpleDateFormat("MMM dd, yyyy hh:mm a", Locale.getDefault()).format(it)
@@ -640,7 +649,7 @@ fun HistoryItem(scan: BagScan, onClick: () -> Unit) {
     ThinGlassPanel(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = scan.status.lowercase() == "completed") { onClick() }
+            .clickable(enabled = scan.status.lowercase() != "pending") { onClick() }
     ) {
         Row(
             modifier = Modifier
@@ -709,7 +718,8 @@ private suspend fun recordScan(barcodeValue: String): String? {
                     userId = user.id,
                     bagUniqueId = uniqueId,
                     scanQR = timestamp,
-                    status = "failed"
+                    status = "failed",
+                    failureReason = "Invalid QR Code: Bag not registered"
                 )
                 supabase.from("bag_scans").insert(failedScan)
             }
