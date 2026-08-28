@@ -1,22 +1,25 @@
 package com.example.waybag.ui.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.waybag.ui.screens.*
 
-import com.example.waybag.data.supabase
 import io.github.jan.supabase.auth.auth
 
 sealed class Screen(val route: String) {
     object Welcome : Screen("welcome")
     object Login : Screen("login")
-    object ForgotPassword : Screen("forgot_password")
     object SignUp : Screen("sign_up")
-    object Dashboard : Screen("dashboard")
+    object Dashboard : Screen("dashboard_root")
     object Profile : Screen("profile")
+
+    // Dashboard Tabs
+    object HomeTab : Screen("home_tab")
+    object QRScanTab : Screen("qr_scan_tab")
+    object AITrackerTab : Screen("ai_tracker_tab")
+    object HistoryTab : Screen("history_tab")
 }
 
 @Composable
@@ -46,16 +49,9 @@ fun WayBagNavHost() {
         composable(Screen.Login.route) {
             LoginScreen(
                 onBackClick = { navController.popBackStack() },
-                onForgotPasswordClick = { navController.navigate(Screen.ForgotPassword.route) },
                 onLoginClick = { navController.navigate(Screen.Dashboard.route) {
                     popUpTo(Screen.Welcome.route) { inclusive = true }
                 }}
-            )
-        }
-        composable(Screen.ForgotPassword.route) {
-            ForgotPasswordScreen(
-                onBackClick = { navController.popBackStack() },
-                onConfirmClick = { navController.popBackStack() }
             )
         }
         composable(Screen.SignUp.route) {
@@ -67,7 +63,7 @@ fun WayBagNavHost() {
             )
         }
         composable(Screen.Dashboard.route) {
-            DashboardScreen(
+            HomeScreen(
                 onProfileClick = {
                     navController.navigate(Screen.Profile.route)
                 }

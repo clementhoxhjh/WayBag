@@ -13,8 +13,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.CheckCircle
@@ -109,92 +111,120 @@ fun PendingScansList(
     onScanSelected: (BagScan) -> Unit,
     onRefresh: () -> Unit
 ) {
+    val scrollState = rememberScrollState()
+    
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 20.dp)
     ) {
-        Spacer(modifier = Modifier.height(24.dp))
-        Text(
-            text = "Select a Scan to Validate",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.ExtraBold,
-            color = Premium_Gray
-        )
-        Text(
-            text = "You need to scan a matching receipt within 20 mins of the QR scan.",
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray.copy(alpha = 0.8f)
-        )
-        
-        Spacer(modifier = Modifier.height(32.dp))
-        
         if (scans.isEmpty()) {
-            Box(
-                modifier = Modifier.weight(1f).fillMaxWidth(), 
-                contentAlignment = Alignment.Center
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                Spacer(modifier = Modifier.height(24.dp))
+                Text(
+                    text = "Select a Scan to Validate",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Premium_Gray
+                )
+                Text(
+                    text = "You need to scan a matching receipt within 20 mins of the QR scan.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray.copy(alpha = 0.8f)
+                )
+                
+                Spacer(modifier = Modifier.height(32.dp))
+                
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp), 
+                    contentAlignment = Alignment.Center
                 ) {
-                    // Illustration Placeholder / Branded Icon
-                    Box(
-                        modifier = Modifier
-                            .size(100.dp)
-                            .clip(CircleShape)
-                            .background(WayBag_Lime.copy(alpha = 0.1f)),
-                        contentAlignment = Alignment.Center
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Receipt,
-                            contentDescription = null,
-                            tint = WayBag_Lime,
-                            modifier = Modifier.size(48.dp)
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.height(24.dp))
-                    
-                    Text(
-                        text = "No pending scans found.",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.DarkGray
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Scan a QR code to display pending items.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
-                    )
-                    
-                    Spacer(modifier = Modifier.height(32.dp))
-                    
-                    // Branded Refresh Button
-                    Button(
-                        onClick = onRefresh,
-                        modifier = Modifier
-                            .height(54.dp)
-                            .padding(horizontal = 24.dp),
-                        shape = CircleShape,
-                        colors = ButtonDefaults.buttonColors(containerColor = WayBag_Lime),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
-                    ) {
+                        // Illustration Placeholder / Branded Icon
+                        Box(
+                            modifier = Modifier
+                                .size(100.dp)
+                                .clip(CircleShape)
+                                .background(WayBag_Lime.copy(alpha = 0.1f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Receipt,
+                                contentDescription = null,
+                                tint = WayBag_Lime,
+                                modifier = Modifier.size(48.dp)
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(24.dp))
+                        
                         Text(
-                            "Refresh", 
-                            color = Color.Black, 
-                            fontWeight = FontWeight.ExtraBold,
-                            style = MaterialTheme.typography.labelLarge
+                            text = "No pending scans found.",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.DarkGray
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Scan a QR code to display pending items.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                        
+                        Spacer(modifier = Modifier.height(32.dp))
+                        
+                        // Branded Refresh Button
+                        Button(
+                            onClick = onRefresh,
+                            modifier = Modifier
+                                .height(54.dp)
+                                .padding(horizontal = 24.dp),
+                            shape = CircleShape,
+                            colors = ButtonDefaults.buttonColors(containerColor = WayBag_Lime),
+                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
+                        ) {
+                            Text(
+                                "Refresh", 
+                                color = Color.Black, 
+                                fontWeight = FontWeight.ExtraBold,
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
                     }
                 }
+                Spacer(modifier = Modifier.height(100.dp))
             }
         } else {
             LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(bottom = 100.dp)
             ) {
+                item {
+                    Column {
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(
+                            text = "Select a Scan to Validate",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Premium_Gray
+                        )
+                        Text(
+                            text = "You need to scan a matching receipt within 20 mins of the QR scan.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray.copy(alpha = 0.8f)
+                        )
+                        Spacer(modifier = Modifier.height(32.dp))
+                    }
+                }
+                
                 items(scans) { scan ->
                     ThinGlassPanel(
                         modifier = Modifier
@@ -368,6 +398,8 @@ fun ResultState(
     state: AITrackerState,
     onDismiss: () -> Unit
 ) {
+    val scrollState = rememberScrollState()
+    
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -377,7 +409,9 @@ fun ResultState(
     ) {
         ThinGlassPanel(modifier = Modifier.fillMaxWidth()) {
             Column(
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier
+                    .padding(24.dp)
+                    .verticalScroll(scrollState),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (state.error != null) {
@@ -402,10 +436,10 @@ fun ResultState(
                     
                     HorizontalDivider(color = Color.White.copy(alpha = 0.2f))
                     
-                    ResultRow("Store", state.analysisResult?.storeName ?: "")
-                    ResultRow("Total", "RM ${state.analysisResult?.totalAmount ?: 0.0}")
-                    ResultRow("Date", state.analysisResult?.timestamp?.take(16)?.replace('T', ' ') ?: "")
-                    ResultRow("Plastic Bag", if (state.analysisResult?.hasPlasticBag == true) "DETECTED" else "None")
+                    ResultRow("Store", state.analysisResult?.storeName ?: "", color = if (state.isSuccess) WayBag_Lime else Color.Red)
+                    ResultRow("Total", "RM ${state.analysisResult?.totalAmount ?: 0.0}", color = if (state.isSuccess) WayBag_Lime else Color.Red)
+                    ResultRow("Date", state.analysisResult?.timestamp?.take(16)?.replace('T', ' ') ?: "", color = if (state.isSuccess) WayBag_Lime else Color.Red)
+                    ResultRow("WayBag", if (state.analysisResult?.hasPlasticBag == true) "DETECTED" else "None", color = if (state.isSuccess) WayBag_Lime else Color.Red)
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
@@ -429,13 +463,13 @@ fun ResultState(
 }
 
 @Composable
-fun ResultRow(label: String, value: String) {
+fun ResultRow(label: String, value: String, color: Color = Color.Unspecified) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(text = label, style = MaterialTheme.typography.labelMedium, color = Color.Gray)
-        Text(text = value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+        Text(text = value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = color)
     }
 }
 

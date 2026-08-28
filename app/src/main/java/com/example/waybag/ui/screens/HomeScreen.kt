@@ -19,44 +19,46 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.platform.LocalConfiguration
+import android.content.res.Configuration
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.*
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.example.waybag.ui.navigation.Screen
 import com.example.waybag.ui.components.GlassBackground
 import com.example.waybag.ui.components.ThinGlassPanel
 import com.example.waybag.ui.components.WayBagLogo
 import com.example.waybag.ui.theme.Premium_Gray
 import com.example.waybag.ui.theme.WayBag_Lime
-import com.example.waybag.ui.viewmodel.DashboardViewModel
+import com.example.waybag.ui.viewmodel.HomeViewModel
 import com.example.waybag.ui.viewmodel.ChartEntry
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.waybag.data.model.UserProfile
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import com.example.waybag.data.supabase
-import io.github.jan.supabase.auth.auth
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
-enum class DashboardTab {
-    Home, QRScan, AITracker
-}
 
 @Composable
-fun DashboardScreen(
+fun HomeScreen(
     onProfileClick: () -> Unit,
-    viewModel: DashboardViewModel = viewModel()
+    viewModel: HomeViewModel = viewModel()
 ) {
-    val scrollState = rememberScrollState()
+    val navController = rememberNavController()
     val userProfile by viewModel.userProfile.collectAsState()
     val profileName = userProfile?.name ?: "User"
     
@@ -64,16 +66,11 @@ fun DashboardScreen(
     val weeklyData by viewModel.weeklyData.collectAsState()
     val monthlyData by viewModel.monthlyData.collectAsState()
     
-    var currentTab by remember { mutableStateOf(DashboardTab.Home) }
-    var showHistory by remember { mutableStateOf(false) }
     val lifecycleOwner = LocalLifecycleOwner.current
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-    if (showHistory) {
-        ScanHistoryScreen(onBack = { showHistory = false })
-        return
-    }
-
-    // Refresh when tab changes OR when returning to this screen from Profile
+    // Refresh data when returning to Home
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -86,32 +83,54 @@ fun DashboardScreen(
         }
     }
 
-    LaunchedEffect(currentTab) {
-        if (currentTab == DashboardTab.Home) {
-            viewModel.refreshData()
-        }
-    }
-    
     GlassBackground {
-        Scaffold(
-            topBar = { 
-                DashboardHeader(
-                    userProfile = userProfile,
-                    onHistoryClick = { showHistory = true },
-                    onProfileClick = onProfileClick
-                ) 
-            },
-            bottomBar = { 
-                DashboardBottomNav(
-                    selectedTab = currentTab,
-                    onTabSelected = { currentTab = it }
-                ) 
-            },
-            containerColor = Color.Transparent
-        ) { innerPadding: PaddingValues ->
-            Box(modifier = Modifier.padding(innerPadding)) {
-                when (currentTab) {
-                    DashboardTab.Home -> {
+        Row(modifier = Modifier.fillMaxSize()) {
+            if (isLandscape) {
+                val currentBackStackEntry by navController.currentBackStackEntryAsState()
+                val currentDestination = currentBackStackEntry?.destination
+                
+                // Only show side nav if not in History view
+                if (currentDestination?.route != Screen.HistoryTab.route) {
+                    HomeSideNav(navController = navController)
+                }
+            }
+            
+            Scaffold(
+                topBar = { 
+                    val currentBackStackEntry by navController.currentBackStackEntryAsState()
+                    val currentDestination = currentBackStackEntry?.destination
+                    
+                    // Only show header if not in History view
+                    if (currentDestination?.route != Screen.HistoryTab.route) {
+                        HomeHeader(
+                            userProfile = userProfile,
+                            onHistoryClick = { navController.navigate(Screen.HistoryTab.route) },
+                            onProfileClick = onProfileClick
+                        )
+                    }
+                },
+                bottomBar = { 
+                    val currentBackStackEntry by navController.currentBackStackEntryAsState()
+                    val currentDestination = currentBackStackEntry?.destination
+                    
+                    // Hide bottom nav in History view OR if in Landscape
+                    if (!isLandscape && currentDestination?.route != Screen.HistoryTab.route) {
+                        HomeBottomNav(navController = navController)
+                    }
+                },
+                containerColor = Color.Transparent,
+                modifier = Modifier.weight(1f)
+            ) { innerPadding: PaddingValues ->
+                NavHost(
+                    navController = navController,
+                    startDestination = Screen.HomeTab.route,
+                    modifier = Modifier.padding(innerPadding)
+                ) {
+                    composable(Screen.HomeTab.route) {
+                        LaunchedEffect(Unit) {
+                            viewModel.refreshData()
+                        }
+                        val scrollState = rememberScrollState()
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -125,7 +144,8 @@ fun DashboardScreen(
                                 totalScans = totalScans
                             )
                             WeeklyImpactPanel(
-                                weeklyData = weeklyData
+                                weeklyData = weeklyData,
+                                viewModel = viewModel
                             )
                             MonthlyContributionPanel(
                                 monthlyData = monthlyData
@@ -133,11 +153,14 @@ fun DashboardScreen(
                             Spacer(modifier = Modifier.height(100.dp))
                         }
                     }
-                    DashboardTab.QRScan -> {
+                    composable(Screen.QRScanTab.route) {
                         QRScanScreen()
                     }
-                    DashboardTab.AITracker -> {
+                    composable(Screen.AITrackerTab.route) {
                         AITrackerScreen()
+                    }
+                    composable(Screen.HistoryTab.route) {
+                        HistoryScreen(onBack = { navController.popBackStack() })
                     }
                 }
             }
@@ -146,7 +169,7 @@ fun DashboardScreen(
 }
 
 @Composable
-fun DashboardHeader(
+fun HomeHeader(
     userProfile: UserProfile?,
     onHistoryClick: () -> Unit,
     onProfileClick: () -> Unit
@@ -309,9 +332,10 @@ fun ProfileStatsPanel(profileName: String, totalScans: Int) {
 
 @Composable
 fun WeeklyImpactPanel(
-    weeklyData: List<ChartEntry>
+    weeklyData: List<ChartEntry>,
+    viewModel: HomeViewModel
 ) {
-    var dayOffset by remember { mutableIntStateOf(0) }
+    val dayOffset by viewModel.dayOffset.collectAsState()
 
     val calendar = remember(dayOffset) {
         Calendar.getInstance().apply {
@@ -428,7 +452,7 @@ fun WeeklyImpactPanel(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
-                    onClick = { dayOffset -= 1 },
+                    onClick = { viewModel.setDayOffset(dayOffset - 1) },
                     modifier = Modifier
                         .size(36.dp)
                         .background(Color.White.copy(alpha = 0.3f), CircleShape)
@@ -449,7 +473,7 @@ fun WeeklyImpactPanel(
                 )
 
                 IconButton(
-                    onClick = { dayOffset += 1 },
+                    onClick = { viewModel.setDayOffset(dayOffset + 1) },
                     modifier = Modifier
                         .size(36.dp)
                         .background(Color.White.copy(alpha = 0.3f), CircleShape)
@@ -559,10 +583,101 @@ fun MonthlyContributionPanel(monthlyData: List<ChartEntry>) {
 }
 
 @Composable
-fun DashboardBottomNav(
-    selectedTab: DashboardTab,
-    onTabSelected: (DashboardTab) -> Unit
+fun HomeSideNav(
+    navController: NavController
 ) {
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentDestination = navBackStackEntry?.destination
+
+    Box(
+        modifier = Modifier
+            .fillMaxHeight()
+            .padding(start = 16.dp, top = 24.dp, bottom = 24.dp, end = 8.dp)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+    ) {
+        // Floating Glass Vertical Container
+        Box(
+            modifier = Modifier
+                .width(72.dp)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(36.dp))
+                .background(Color.White.copy(alpha = 0.75f))
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(36.dp)
+                )
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.SpaceEvenly,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                val tabs = listOf(
+                    Triple("Home", Icons.Default.Home, Screen.HomeTab.route),
+                    Triple("Scan", Icons.Default.QrCodeScanner, Screen.QRScanTab.route),
+                    Triple("AI", Icons.Default.TrackChanges, Screen.AITrackerTab.route)
+                )
+
+                tabs.forEach { (_, icon, route) ->
+                    val active = currentDestination?.hierarchy?.any { it.route == route } == true
+                    SideNavItem(
+                        icon = icon,
+                        active = active,
+                        onClick = {
+                            navController.navigate(route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SideNavItem(
+    icon: ImageVector,
+    active: Boolean,
+    onClick: () -> Unit
+) {
+    val contentColor = if (active) Color(0xFF4B8B00) else Premium_Gray.copy(alpha = 0.5f)
+    val bgColor = if (active) WayBag_Lime.copy(alpha = 0.3f) else Color.Transparent
+
+    Box(
+        modifier = Modifier
+            .size(56.dp)
+            .clip(CircleShape)
+            .background(bgColor)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null, 
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = contentColor,
+            modifier = Modifier.size(28.dp)
+        )
+    }
+}
+
+@Composable
+fun HomeBottomNav(
+    navController: NavController
+) {
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentDestination = navBackStackEntry?.destination
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -587,24 +702,29 @@ fun DashboardBottomNav(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                BottomNavItem(
-                    label = "Home",
-                    icon = Icons.Default.Home,
-                    active = selectedTab == DashboardTab.Home,
-                    onClick = { onTabSelected(DashboardTab.Home) }
+                val tabs = listOf(
+                    Triple("Home", Icons.Default.Home, Screen.HomeTab.route),
+                    Triple("QR Scan", Icons.Default.QrCodeScanner, Screen.QRScanTab.route),
+                    Triple("AI Tracker", Icons.Default.TrackChanges, Screen.AITrackerTab.route)
                 )
-                BottomNavItem(
-                    label = "QR Scan",
-                    icon = Icons.Default.QrCodeScanner,
-                    active = selectedTab == DashboardTab.QRScan,
-                    onClick = { onTabSelected(DashboardTab.QRScan) }
-                )
-                BottomNavItem(
-                    label = "AI Tracker",
-                    icon = Icons.Default.TrackChanges,
-                    active = selectedTab == DashboardTab.AITracker,
-                    onClick = { onTabSelected(DashboardTab.AITracker) }
-                )
+
+                tabs.forEach { (label, icon, route) ->
+                    val active = currentDestination?.hierarchy?.any { it.route == route } == true
+                    BottomNavItem(
+                        label = label,
+                        icon = icon,
+                        active = active,
+                        onClick = {
+                            navController.navigate(route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    )
+                }
             }
         }
     }

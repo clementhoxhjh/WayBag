@@ -24,7 +24,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 @Composable
 fun LoginScreen(
     onBackClick: () -> Unit,
-    onForgotPasswordClick: () -> Unit,
     onLoginClick: () -> Unit
 ) {
     var email by rememberSaveable { mutableStateOf("") }
@@ -91,17 +90,6 @@ fun LoginScreen(
                         placeholder = "Enter your password",
                         isPassword = true
                     )
-
-                    TextButton(
-                        onClick = onForgotPasswordClick,
-                        modifier = Modifier.align(Alignment.Start),
-                        contentPadding = PaddingValues(0.dp)
-                    ) {
-                        Text(
-                            "Forgot password?",
-                            style = MaterialTheme.typography.labelMedium.copy(color = Apple_Blue)
-                        )
-                    }
                 }
 
                 Spacer(modifier = Modifier.weight(1f))

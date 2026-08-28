@@ -20,7 +20,7 @@ data class ChartEntry(
     val quantity: Int    // Actual count to display as text
 )
 
-class DashboardViewModel : ViewModel() {
+class HomeViewModel : ViewModel() {
 
     private val _userProfile = MutableStateFlow<UserProfile?>(null)
     val userProfile: StateFlow<UserProfile?> = _userProfile
@@ -36,6 +36,9 @@ class DashboardViewModel : ViewModel() {
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
+
+    private val _dayOffset = MutableStateFlow(0)
+    val dayOffset: StateFlow<Int> = _dayOffset
 
     init {
         refreshData()
@@ -71,6 +74,10 @@ class DashboardViewModel : ViewModel() {
                 _isLoading.value = false
             }
         }
+    }
+
+    fun setDayOffset(offset: Int) {
+        _dayOffset.value = offset
     }
 
     private fun processWeeklyData(scans: List<BagScan>) {

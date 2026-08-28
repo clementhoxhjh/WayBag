@@ -48,7 +48,7 @@ fun GlassBackground(content: @Composable BoxScope.() -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(WayBag_Lime.copy(alpha = 0.3f))
+            .background(WayBag_Lime.copy(alpha = 0.5f))
     ) {
         // Flowing Lavender
         Box(
