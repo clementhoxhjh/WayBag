@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.TrackChanges
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +54,7 @@ import java.util.Calendar
 import java.util.Locale
 
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onProfileClick: () -> Unit,
@@ -131,26 +133,34 @@ fun HomeScreen(
                             viewModel.refreshData()
                         }
                         val scrollState = rememberScrollState()
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 24.dp)
-                                .verticalScroll(scrollState),
-                            verticalArrangement = Arrangement.spacedBy(24.dp)
+                        val isLoading by viewModel.isLoading.collectAsState()
+                        
+                        PullToRefreshBox(
+                            isRefreshing = isLoading,
+                            onRefresh = { viewModel.refreshData() },
+                            modifier = Modifier.fillMaxSize()
                         ) {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            ProfileStatsPanel(
-                                profileName = profileName,
-                                totalScans = totalScans
-                            )
-                            WeeklyImpactPanel(
-                                weeklyData = weeklyData,
-                                viewModel = viewModel
-                            )
-                            MonthlyContributionPanel(
-                                monthlyData = monthlyData
-                            )
-                            Spacer(modifier = Modifier.height(100.dp))
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 24.dp)
+                                    .verticalScroll(scrollState),
+                                verticalArrangement = Arrangement.spacedBy(24.dp)
+                            ) {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                ProfileStatsPanel(
+                                    profileName = profileName,
+                                    totalScans = totalScans
+                                )
+                                WeeklyImpactPanel(
+                                    weeklyData = weeklyData,
+                                    viewModel = viewModel
+                                )
+                                MonthlyContributionPanel(
+                                    monthlyData = monthlyData
+                                )
+                                Spacer(modifier = Modifier.height(100.dp))
+                            }
                         }
                     }
                     composable(Screen.QRScanTab.route) {

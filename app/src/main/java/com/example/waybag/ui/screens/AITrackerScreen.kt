@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,6 +52,7 @@ import android.net.Uri
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AITrackerScreen(
     viewModel: AITrackerViewModel = viewModel()
@@ -78,11 +80,17 @@ fun AITrackerScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         when {
             state.selectedScan == null -> {
-                PendingScansList(
-                    scans = state.pendingScans,
-                    onScanSelected = { viewModel.selectScan(it) },
-                    onRefresh = { viewModel.fetchPendingScans() }
-                )
+                PullToRefreshBox(
+                    isRefreshing = state.isRefreshing,
+                    onRefresh = { viewModel.fetchPendingScans() },
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    PendingScansList(
+                        scans = state.pendingScans,
+                        onScanSelected = { viewModel.selectScan(it) },
+                        onRefresh = { viewModel.fetchPendingScans() }
+                    )
+                }
             }
             state.isAnalyzing -> {
                 AnalyzingState()
@@ -437,9 +445,10 @@ fun ResultState(
                     HorizontalDivider(color = Color.White.copy(alpha = 0.2f))
                     
                     ResultRow("Store", state.analysisResult?.storeName ?: "", color = if (state.isSuccess) WayBag_Lime else Color.Red)
-                    ResultRow("Total", "RM ${state.analysisResult?.totalAmount ?: 0.0}", color = if (state.isSuccess) WayBag_Lime else Color.Red)
+                    ResultRow("Total", "RM ${state.analysisResult?.totalAmount ?: "0.00"}", color = if (state.isSuccess) WayBag_Lime else Color.Red)
                     ResultRow("Date", state.analysisResult?.timestamp?.take(16)?.replace('T', ' ') ?: "", color = if (state.isSuccess) WayBag_Lime else Color.Red)
-                    ResultRow("WayBag", if (state.analysisResult?.hasPlasticBag == true) "DETECTED" else "None", color = if (state.isSuccess) WayBag_Lime else Color.Red)
+                    val plasticDetected = state.analysisResult?.hasPlasticBag?.lowercase().let { it == "true" || it == "yes" }
+                    ResultRow("WayBag", if (plasticDetected) "DETECTED" else "None", color = if (state.isSuccess) WayBag_Lime else Color.Red)
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
