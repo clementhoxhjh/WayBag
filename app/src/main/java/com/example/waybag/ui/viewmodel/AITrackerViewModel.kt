@@ -38,9 +38,9 @@ data class ReceiptAnalysis(
     val storeName: String = "",
     val regNo: String = "", 
     val timestamp: String = "",
-    val totalAmount: Double = 0.0,
-    val hasPlasticBag: Boolean = false,
-    val items: List<String> = emptyList()
+    val totalAmount: String = "",
+    val hasPlasticBag: String = "",
+    val items: List<JsonElement> = emptyList()
 )
 
 data class AITrackerState(
@@ -50,7 +50,8 @@ data class AITrackerState(
     val analysisResult: ReceiptAnalysis? = null,
     val validationMessage: String? = null,
     val isSuccess: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val isRefreshing: Boolean = false // Added for pull-to-refresh
 )
 
 class AITrackerViewModel : ViewModel() {
@@ -60,7 +61,11 @@ class AITrackerViewModel : ViewModel() {
 
     private val httpClient = HttpClient(Android) {
         install(ContentNegotiation) {
-            json(Json { ignoreUnknownKeys = true })
+            json(Json { 
+                ignoreUnknownKeys = true 
+                isLenient = true // Very important: handles loose JSON formatting
+                coerceInputValues = true // Converts types where possible
+            })
         }
     }
 
@@ -71,6 +76,7 @@ class AITrackerViewModel : ViewModel() {
     fun fetchPendingScans() {
         val user = supabase.auth.currentUserOrNull() ?: return
         viewModelScope.launch {
+            _state.update { it.copy(isRefreshing = true) }
             try {
                 val scans = supabase.from("bag_scans").select {
                     filter {
@@ -78,9 +84,10 @@ class AITrackerViewModel : ViewModel() {
                         eq("status", "pending")
                     }
                 }.decodeList<BagScan>()
-                _state.update { it.copy(pendingScans = scans) }
+                _state.update { it.copy(pendingScans = scans, isRefreshing = false) }
             } catch (t: Throwable) {
                 Log.e("AITracker", "Fetch failed", t)
+                _state.update { it.copy(isRefreshing = false) }
             }
         }
     }
@@ -127,18 +134,21 @@ class AITrackerViewModel : ViewModel() {
                         - regNo: EXTRACT THE FULL REGISTRATION NUMBER. 
                           Example: "202401012345 (1309876-V)". MUST INCLUDE THE PARENTHESES AND ALL CHARACTERS.
                         
-                        OUTPUT ONLY JSON:
+                        OUTPUT ONLY RAW JSON WITH QUOTES FOR ALL VALUES:
                         { 
-                          "storeName": "Exact Shop Name", 
-                          "regNo": "FULL_NUMBER_WITH_PARENTHESES", 
-                          "timestamp": "ISO_TIMESTAMP_OR_MISSING", 
-                          "totalAmount": 0.00, 
-                          "hasPlasticBag": Boolean, 
-                          "items": ["Item1", "Item2"] 
+                          "storeName": "Name", 
+                          "regNo": "Number", 
+                          "timestamp": "ISO_TIME", 
+                          "totalAmount": "Amount", 
+                          "hasPlasticBag": "true or false", 
+                          "items": ["Item 1 Name", "Item 2 Name"] 
                         }
                     """.trimIndent()
 
-                    val url = "https://generativelanguage.googleapis.com/v1beta/$targetModel:generateContent?key=$apiKey"
+                    Log.d("AITracker", ">>> SENDING REQUEST TO GEMINI...")
+                    // Using the exact model name from your SDK snippet
+                    // We use v1beta as 'lite' versions are often in beta/preview
+                    val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=$apiKey"
                     val response = httpClient.post(url) {
                         contentType(ContentType.Application.Json)
                         setBody(buildJsonObject {
@@ -156,12 +166,13 @@ class AITrackerViewModel : ViewModel() {
                                 }
                             }
                             putJsonObject("generationConfig") {
-                                put("temperature", 0.0) // Absolute consistency
-                                put("topP", 1.0)
-                                put("maxOutputTokens", 2048)
+                                put("temperature", 0.1) 
+                                put("maxOutputTokens", 1024)
                             }
                         })
                     }
+
+                    Log.d("AITracker", ">>> RESPONSE STATUS: ${response.status}")
 
                     if (response.status == HttpStatusCode.OK) {
                         val body = response.body<JsonObject>()
@@ -170,14 +181,29 @@ class AITrackerViewModel : ViewModel() {
                             ?.get("parts")?.jsonArray?.get(0)?.jsonObject
                             ?.get("text")?.jsonPrimitive?.content ?: ""
                         
+                        Log.d("AITracker", ">>> AI RAW REPLY: $rawText")
+
                         val jsonStartIndex = rawText.indexOf("{")
                         val jsonEndIndex = rawText.lastIndexOf("}")
                         
                         if (jsonStartIndex != -1 && jsonEndIndex != -1 && jsonEndIndex > jsonStartIndex) {
                             val cleanJson = rawText.substring(jsonStartIndex, jsonEndIndex + 1)
+                            Log.d("AITracker", ">>> EXTRACTED JSON: $cleanJson")
                             Json { ignoreUnknownKeys = true }.decodeFromString<ReceiptAnalysis>(cleanJson)
-                        } else null
-                    } else null
+                        } else {
+                            Log.e("AITracker", ">>> ERROR: JSON NOT FOUND IN REPLY")
+                            null
+                        }
+                    } else {
+                        val errCode = response.status.value
+                        Log.e("AITracker", ">>> HTTP ERROR: $errCode")
+                        if (errCode == 429) {
+                            _state.update { it.copy(error = "Server busy") } // Exactly as requested
+                        } else {
+                            _state.update { it.copy(error = "AI Server Error ($errCode)") }
+                        }
+                        null
+                    }
                 }
 
                 if (result != null) {
@@ -217,7 +243,10 @@ class AITrackerViewModel : ViewModel() {
             val missingFields = mutableListOf<String>()
             if (analysis.storeName.isBlank() || analysis.storeName.length < 2) missingFields.add("Shop Name")
             if (analysis.regNo.isBlank() || analysis.regNo.lowercase().contains("not found")) missingFields.add("Registration Number")
-            if (analysis.totalAmount <= 0) missingFields.add("Total Amount")
+            
+            val amountValue = analysis.totalAmount.toDoubleOrNull() ?: 0.0
+            if (amountValue <= 0) missingFields.add("Total Amount")
+
             if (analysis.timestamp.isBlank() || analysis.timestamp.contains("MISSING", ignoreCase = true)) {
                 missingFields.add("Receipt Time")
             }
@@ -227,6 +256,7 @@ class AITrackerViewModel : ViewModel() {
                 val duplicateCount = supabase.from("bag_scans").select {
                     filter {
                         eq("regNo", analysis.regNo)
+                        eq("totalAmount", amountValue)
                         eq("status", "completed")
                     }
                 }.decodeList<BagScan>().size
@@ -241,7 +271,10 @@ class AITrackerViewModel : ViewModel() {
             }
 
             // 2. Check for plastic bag
-            if (analysis.hasPlasticBag) {
+            val plasticBagFound = analysis.hasPlasticBag.toString().lowercase().let { 
+                it == "true" || it == "yes" 
+            }
+            if (plasticBagFound) {
                 _state.update { it.copy(validationMessage = "FAILED: Plastic bag charge detected.") }
                 saveResultsToDatabaseInScope(scan, analysis, "failed", receiptImageUrl)
                 return@launch
@@ -281,12 +314,13 @@ class AITrackerViewModel : ViewModel() {
         try {
             val itemsJson = Json.encodeToString(analysis.items)
             val reason = if (status == "failed") _state.value.validationMessage else null
-            
+            val amountValue = analysis.totalAmount.toDoubleOrNull() ?: 0.0
+
             supabase.from("bag_scans").update({
                 set("status", status)
                 set("storeName", analysis.storeName)
                 set("regNo", analysis.regNo)
-                set("totalAmount", analysis.totalAmount)
+                set("totalAmount", amountValue)
                 set("itemsJson", itemsJson)
                 set("receiptTimestamp", analysis.timestamp) // Save the receipt time
                 set("receiptImageUrl", receiptImageUrl) // Save the image URL
@@ -301,9 +335,28 @@ class AITrackerViewModel : ViewModel() {
     }
 
     private fun parseSimpleIso(timestamp: String): Date? {
-        val formats = listOf("yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd")
+        val cleaned = timestamp.trim().replace("T", " ") // Handle ISO 'T' separator
+        val formats = listOf(
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy-MM-dd HH:mm",
+            "dd/MM/yyyy HH:mm:ss",
+            "dd/MM/yyyy HH:mm",
+            "yyyy/MM/dd HH:mm",
+            "yyyy-MM-dd",
+            "dd/MM/yyyy"
+        )
         for (fmt in formats) {
-            try { return SimpleDateFormat(fmt, Locale.US).apply { timeZone = TimeZone.getDefault() }.parse(timestamp) } catch (e: Exception) {}
+            try { 
+                val sdf = SimpleDateFormat(fmt, Locale.US).apply { 
+                    timeZone = TimeZone.getDefault()
+                    isLenient = false 
+                }
+                val date = sdf.parse(cleaned)
+                if (date != null) {
+                    Log.d("AITracker", "Successfully parsed $timestamp as $date using format $fmt")
+                    return date
+                }
+            } catch (e: Exception) {}
         }
         return null
     }
