@@ -367,7 +367,7 @@ fun WeeklyImpactPanel(
     ThinGlassPanel(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(24.dp)) {
             Text(
-                text = "Weekly Carbon Footprint Reduced",
+                text = "Your Weekly Impact",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
@@ -375,7 +375,7 @@ fun WeeklyImpactPanel(
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = "${String.format(Locale.US, "%.2f", totalWeeklyCarbonReduced)}kg",
+                text = "${String.format(Locale.US, "%.2f", totalWeeklyCarbonReduced)}kg Carbon Reduced",
                 style = MaterialTheme.typography.headlineMedium.copy(
                     fontWeight = FontWeight.ExtraBold,
                     color = Color(0xFF4B8B00)

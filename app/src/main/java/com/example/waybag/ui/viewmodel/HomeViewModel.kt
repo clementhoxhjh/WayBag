@@ -57,17 +57,26 @@ class HomeViewModel : ViewModel() {
                 Log.d("Dashboard", "Refreshed profile: $profile")
                 _userProfile.value = profile
 
-                // Fetch Scans
-                val scans = supabase.from("bag_scans").select {
+                // Fetch Personal Scans for the counter
+                val personalScans = supabase.from("bag_scans").select {
                     filter {
                         eq("userId", user.id)
-                        eq("status", "completed") // ONLY count fully validated scans for the Dashboard
+                        eq("status", "completed")
                     }
                 }.decodeList<BagScan>()
+                _totalScans.value = personalScans.size
 
-                _totalScans.value = scans.size
-                processWeeklyData(scans)
-                processMonthlyData(scans)
+                // Fetch GLOBAL Scans for the charts (Total Contribution)
+                val globalScans = supabase.from("bag_scans").select {
+                    filter {
+                        eq("status", "completed") 
+                    }
+                }.decodeList<BagScan>()
+                
+                Log.d("Dashboard", "Total Community Scans Fetched: ${globalScans.size}")
+
+                processWeeklyData(personalScans) // Only your own scans for the weekly chart
+                processMonthlyData(globalScans)  // All users for the monthly community chart
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
