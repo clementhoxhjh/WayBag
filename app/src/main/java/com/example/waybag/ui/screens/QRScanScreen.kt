@@ -1,6 +1,8 @@
 package com.example.waybag.ui.screens
 
 import android.Manifest
+import android.app.Activity
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -11,7 +13,9 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Warning
@@ -26,10 +30,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.waybag.data.model.BagScan
 import com.example.waybag.data.model.ValidBag
 import com.example.waybag.data.supabase
 import com.example.waybag.ui.components.ThinGlassPanel
+import com.example.waybag.ui.theme.WayBag_Lime
+import com.example.waybag.ui.viewmodel.QRScanViewModel
+import com.example.waybag.utils.DateUtils
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import io.github.jan.supabase.auth.auth
@@ -39,10 +47,6 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
-import com.example.waybag.ui.theme.WayBag_Lime
-import com.example.waybag.utils.DateUtils
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.waybag.ui.viewmodel.QRScanViewModel
 
 @Composable
 fun QRScanScreen(
@@ -52,6 +56,16 @@ fun QRScanScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
+
+    // Lock orientation to portrait when camera is active
+    DisposableEffect(Unit) {
+        val activity = context as? Activity
+        val originalOrientation = activity?.requestedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        onDispose {
+            activity?.requestedOrientation = originalOrientation
+        }
+    }
     
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -239,6 +253,7 @@ fun QRScannerOverlay() {
 
 @Composable
 fun SuccessState(uniqueId: String, timestamp: String, onReset: () -> Unit) {
+    val scrollState = rememberScrollState()
     val displayTime = remember(timestamp) {
         val date = DateUtils.parseIsoTimestamp(timestamp)
         if (date != null) {
@@ -252,6 +267,7 @@ fun SuccessState(uniqueId: String, timestamp: String, onReset: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(Color.White.copy(alpha = 0.9f))
+            .verticalScroll(scrollState)
             .padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -314,10 +330,12 @@ fun SuccessState(uniqueId: String, timestamp: String, onReset: () -> Unit) {
 
 @Composable
 fun ErrorState(message: String, onReset: () -> Unit) {
+    val scrollState = rememberScrollState()
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.White)
+            .verticalScroll(scrollState)
             .padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -349,11 +367,11 @@ fun ErrorState(message: String, onReset: () -> Unit) {
         
         Button(
             onClick = onReset,
-            colors = ButtonDefaults.buttonColors(containerColor = Color.Gray),
+            colors = ButtonDefaults.buttonColors(containerColor = WayBag_Lime),
             shape = RoundedCornerShape(50.dp),
             modifier = Modifier.fillMaxWidth().height(56.dp)
         ) {
-            Text("Try Again", color = Color.White, fontWeight = FontWeight.Bold)
+            Text("Scan Again", color = Color.Black, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -367,7 +385,7 @@ private suspend fun recordScan(barcodeValue: String): String? {
                 filter { eq("unique_id", uniqueId) }
             }
         
-        val validBag = response.decodeSingleOrNull<com.example.waybag.data.model.ValidBag>()
+        val validBag = response.decodeSingleOrNull<ValidBag>()
         val user = supabase.auth.currentUserOrNull()
         
         // Use local timezone format (e.g. +0800) for easier reading in DB

@@ -49,6 +49,8 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
+import android.app.Activity
+import android.content.pm.ActivityInfo
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
@@ -268,6 +270,16 @@ fun ReceiptCameraView(
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     val imageCapture = remember { ImageCapture.Builder().build() }
+
+    // Lock orientation to portrait when camera is active
+    DisposableEffect(Unit) {
+        val activity = context as? Activity
+        val originalOrientation = activity?.requestedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        onDispose {
+            activity?.requestedOrientation = originalOrientation
+        }
+    }
     
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(
@@ -370,11 +382,19 @@ fun ReceiptCameraView(
                             }
                         })
                     },
-                    modifier = Modifier.size(80.dp),
+                    modifier = Modifier
+                        .size(80.dp)
+                        .aspectRatio(1f), // Ensure perfect square/circle
                     shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White)
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                    contentPadding = PaddingValues(0.dp) // Remove default padding
                 ) {
-                    Icon(Icons.Default.Camera, contentDescription = "Capture", tint = Color.Black, modifier = Modifier.size(40.dp))
+                    Icon(
+                        imageVector = Icons.Default.Camera, 
+                        contentDescription = "Capture", 
+                        tint = Color.Black, 
+                        modifier = Modifier.size(40.dp)
+                    )
                 }
                 
                 // Placeholder to balance the Gallery button
@@ -477,8 +497,17 @@ fun ResultRow(label: String, value: String, color: Color = Color.Unspecified) {
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(text = label, style = MaterialTheme.typography.labelMedium, color = Color.Gray)
-        Text(text = value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = color)
+        Text(
+            text = label, 
+            style = MaterialTheme.typography.labelMedium, 
+            color = color.copy(alpha = 0.7f) // Apply color to label with slight transparency
+        )
+        Text(
+            text = value, 
+            style = MaterialTheme.typography.bodyMedium, 
+            fontWeight = FontWeight.Medium, 
+            color = color
+        )
     }
 }
 

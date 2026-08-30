@@ -24,12 +24,19 @@ sealed class Screen(val route: String) {
 
 @Composable
 fun WayBagNavHost() {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val navController = rememberNavController()
+    
+    // NEW: Check local storage for auto-login as per Lab example
+    val isLocallyLoggedIn = androidx.compose.runtime.remember { 
+        com.example.waybag.data.isUserLoggedIn(context) 
+    }
+    
     val currentUser = androidx.compose.runtime.remember { 
         com.example.waybag.data.supabase.auth.currentUserOrNull() 
     }
     
-    val startRoute = if (currentUser != null) Screen.Dashboard.route else Screen.Welcome.route
+    val startRoute = if (isLocallyLoggedIn || currentUser != null) Screen.Dashboard.route else Screen.Welcome.route
 
     NavHost(
         navController = navController,

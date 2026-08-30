@@ -8,6 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.waybag.ui.components.*
 import com.example.waybag.ui.theme.Apple_Blue
@@ -26,6 +27,7 @@ fun LoginScreen(
     onBackClick: () -> Unit,
     onLoginClick: () -> Unit
 ) {
+    val context = LocalContext.current
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
@@ -70,6 +72,10 @@ fun LoginScreen(
                     .padding(horizontal = 32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                Spacer(modifier = Modifier.height(20.dp))
+
+                WayBagLogo(modifier = Modifier.size(140.dp))
+
                 Spacer(modifier = Modifier.height(40.dp))
                 
                 Column(
@@ -111,6 +117,27 @@ fun LoginScreen(
                                     this.email = email
                                     this.password = password
                                 }
+                                
+                                // NEW: Save session locally after successful login
+                                val user = supabase.auth.currentUserOrNull()
+                                if (user != null) {
+                                    val profile = supabase.from("profiles").select {
+                                        filter { eq("id", user.id) }
+                                    }.decodeSingleOrNull<com.example.waybag.data.model.UserProfile>()
+                                    
+                                    if (profile != null) {
+                                        com.example.waybag.data.saveLoginStatus(context, true)
+                                        com.example.waybag.data.saveUserSession(
+                                            context,
+                                            com.example.waybag.data.UserSession(
+                                                userId = user.id,
+                                                email = user.email ?: "",
+                                                name = profile.name
+                                            )
+                                        )
+                                    }
+                                }
+                                
                                 onLoginClick()
                             } catch (e: Exception) {
                                 val message = e.message ?: ""

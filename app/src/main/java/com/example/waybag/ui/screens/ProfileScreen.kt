@@ -59,8 +59,10 @@ fun ProfileScreen(
                     scope.launch {
                         try {
                             supabase.auth.signOut()
+                            com.example.waybag.data.clearStorage(context)
                             onLogoutClick()
                         } catch (e: Exception) {
+                            com.example.waybag.data.clearStorage(context)
                             onLogoutClick()
                         }
                     }

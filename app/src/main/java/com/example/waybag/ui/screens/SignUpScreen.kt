@@ -279,6 +279,18 @@ fun SignUpScreen(
                                             avatar_url = avatarUrl
                                         )
                                         supabase.from("profiles").insert(profile)
+                                        
+                                        // NEW: Save session locally after successful signup
+                                        com.example.waybag.data.saveLoginStatus(context, true)
+                                        com.example.waybag.data.saveUserSession(
+                                            context,
+                                            com.example.waybag.data.UserSession(
+                                                userId = userId,
+                                                email = email,
+                                                name = name
+                                            )
+                                        )
+                                        
                                         showSuccessDialog = true
                                     } else {
                                         errorMessage = "Sign up failed: User ID is null"

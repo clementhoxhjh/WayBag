@@ -189,15 +189,13 @@ fun HomeHeader(
             .fillMaxWidth()
             .statusBarsPadding()
             .height(90.dp)
-            .padding(horizontal = 20.dp),
-        contentAlignment = Alignment.Center
+            .padding(horizontal = 20.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        // Left Action: History
+        Box(
+            modifier = Modifier.fillMaxHeight().align(Alignment.CenterStart),
+            contentAlignment = Alignment.Center
         ) {
-            // History Button - Replaces Exit App
             TextButton(
                 onClick = onHistoryClick,
                 modifier = Modifier
@@ -219,25 +217,20 @@ fun HomeHeader(
                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
                 )
             }
+        }
 
-            // Centered Logo and Wordmark
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                WayBagLogo(modifier = Modifier.size(36.dp))
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = "WayBag",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 0.5.sp,
-                        color = Premium_Gray
-                    )
-                )
-            }
-            
-            // Profile Avatar
+        // CENTER: Logo
+        WayBagLogo(
+            modifier = Modifier
+                .size(60.dp)
+                .align(Alignment.Center)
+        )
+
+        // Right Action: Profile
+        Box(
+            modifier = Modifier.fillMaxHeight().align(Alignment.CenterEnd),
+            contentAlignment = Alignment.Center
+        ) {
             Box(
                 modifier = Modifier
                     .size(44.dp)
@@ -358,14 +351,14 @@ fun WeeklyImpactPanel(
 
     val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
     val selectedDayIndex = when (dayOfWeek) {
-        Calendar.MONDAY -> 0
-        Calendar.TUESDAY -> 1
-        Calendar.WEDNESDAY -> 2
-        Calendar.THURSDAY -> 3
-        Calendar.FRIDAY -> 4
-        Calendar.SATURDAY -> 5
-        Calendar.SUNDAY -> 6
-        else -> 6
+        Calendar.SUNDAY -> 0
+        Calendar.MONDAY -> 1
+        Calendar.TUESDAY -> 2
+        Calendar.WEDNESDAY -> 3
+        Calendar.THURSDAY -> 4
+        Calendar.FRIDAY -> 5
+        Calendar.SATURDAY -> 6
+        else -> 0
     }
 
     val currentDayEntry = weeklyData.getOrNull(selectedDayIndex) ?: ChartEntry(0f, 0)
@@ -402,7 +395,7 @@ fun WeeklyImpactPanel(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.Bottom
             ) {
-                val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+                val days = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
 
                 repeat(7) { index ->
                     val entry = weeklyData.getOrNull(index) ?: ChartEntry(0f, 0)

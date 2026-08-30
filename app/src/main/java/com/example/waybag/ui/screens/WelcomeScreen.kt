@@ -29,10 +29,14 @@ fun WelcomeScreen(
     var visible by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     
+    val context = androidx.compose.ui.platform.LocalContext.current
+    
     LaunchedEffect(Unit) {
-        // Auto-login check: only if not already on the screen from a logout
+        // Auto-login check using both Local Storage (Lab method) and Supabase
+        val isLocallyLoggedIn = com.example.waybag.data.isUserLoggedIn(context)
         val currentUser = supabase.auth.currentUserOrNull()
-        if (currentUser != null) {
+        
+        if (isLocallyLoggedIn || currentUser != null) {
             onAutoLogin() // Use the dedicated auto-login path
         } else {
             delay(300)
@@ -54,14 +58,7 @@ fun WelcomeScreen(
                 enter = fadeIn(tween(1000)) + slideInVertically(tween(1000)) { -60 }
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    WayBagLogo(modifier = Modifier.size(160.dp))
-                    Spacer(modifier = Modifier.height(32.dp))
-                    Text(
-                        text = "WayBag",
-                        style = MaterialTheme.typography.displayLarge,
-                        color = Color.Black,
-                        textAlign = TextAlign.Center
-                    )
+                    WayBagLogo(modifier = Modifier.size(240.dp))
                 }
             }
 

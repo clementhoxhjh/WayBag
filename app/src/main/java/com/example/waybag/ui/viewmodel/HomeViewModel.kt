@@ -10,6 +10,7 @@ import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import com.example.waybag.utils.DateUtils
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -30,6 +31,8 @@ class HomeViewModel : ViewModel() {
 
     private val _weeklyData = MutableStateFlow(List(7) { ChartEntry(0f, 0) })
     val weeklyData: StateFlow<List<ChartEntry>> = _weeklyData
+
+    private val _personalScans = MutableStateFlow<List<BagScan>>(emptyList())
 
     private val _monthlyData = MutableStateFlow(List(12) { ChartEntry(0f, 0) }) 
     val monthlyData: StateFlow<List<ChartEntry>> = _monthlyData
@@ -65,6 +68,7 @@ class HomeViewModel : ViewModel() {
                     }
                 }.decodeList<BagScan>()
                 _totalScans.value = personalScans.size
+                _personalScans.value = personalScans
 
                 // Fetch GLOBAL Scans for the charts (Total Contribution)
                 val globalScans = supabase.from("bag_scans").select {
@@ -75,7 +79,7 @@ class HomeViewModel : ViewModel() {
                 
                 Log.d("Dashboard", "Total Community Scans Fetched: ${globalScans.size}")
 
-                processWeeklyData(personalScans) // Only your own scans for the weekly chart
+                processWeeklyData(_dayOffset.value) // Initial processing
                 processMonthlyData(globalScans)  // All users for the monthly community chart
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -87,35 +91,48 @@ class HomeViewModel : ViewModel() {
 
     fun setDayOffset(offset: Int) {
         _dayOffset.value = offset
+        processWeeklyData(offset)
     }
 
-    private fun processWeeklyData(scans: List<BagScan>) {
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val calendar = Calendar.getInstance()
+    private fun processWeeklyData(offset: Int) {
+        val scans = _personalScans.value
+        val calendar = Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_YEAR, offset)
+        }
         
-        // Get last 7 days starting from Monday
-        val weeklyCounts = FloatArray(7) { 0f }
-        val dayMap = mapOf(
-            Calendar.MONDAY to 0,
-            Calendar.TUESDAY to 1,
-            Calendar.WEDNESDAY to 2,
-            Calendar.THURSDAY to 3,
-            Calendar.FRIDAY to 4,
-            Calendar.SATURDAY to 5,
-            Calendar.SUNDAY to 6
-        )
+        // Find the start of the week (Sunday) for the current offset date
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        while (calendar.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
+            calendar.add(Calendar.DAY_OF_YEAR, -1)
+        }
+        val weekStart = calendar.time
+        
+        calendar.add(Calendar.DAY_OF_YEAR, 7)
+        val weekEnd = calendar.time
 
+        // Sunday is 0, Saturday is 6
+        val weeklyCounts = FloatArray(7) { 0f }
+        
         scans.forEach { scan ->
             try {
-                // Supabase timestamp is often ISO 8601
-                val date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(scan.scanQR.take(10))
-                if (date != null) {
-                    calendar.time = date
-                    val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
-                    val index = dayMap[dayOfWeek]
-                    if (index != null) {
-                        weeklyCounts[index] += 1f
+                val date: Date? = DateUtils.parseIsoTimestamp(scan.scanQR)
+                if (date != null && !date.before(weekStart) && date.before(weekEnd)) {
+                    val scanCal = Calendar.getInstance().apply { time = date }
+                    val dayOfWeek = scanCal.get(Calendar.DAY_OF_WEEK)
+                    val index = when (dayOfWeek) {
+                        Calendar.SUNDAY -> 0
+                        Calendar.MONDAY -> 1
+                        Calendar.TUESDAY -> 2
+                        Calendar.WEDNESDAY -> 3
+                        Calendar.THURSDAY -> 4
+                        Calendar.FRIDAY -> 5
+                        Calendar.SATURDAY -> 6
+                        else -> 0
                     }
+                    weeklyCounts[index] += 1f
                 }
             } catch (e: Exception) {}
         }
