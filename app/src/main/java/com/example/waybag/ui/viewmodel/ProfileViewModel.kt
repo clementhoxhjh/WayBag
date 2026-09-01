@@ -5,16 +5,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.waybag.data.model.UserProfile
 import com.example.waybag.data.supabase
-import io.github.jan.supabase.auth.auth
+import com.example.waybag.data.CurrentUser
 import io.github.jan.supabase.postgrest.from
-import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.util.UUID
 
 data class ProfileState(
     val userProfile: UserProfile? = null,
@@ -25,7 +23,8 @@ data class ProfileState(
     val password: String = "",
     val isLoading: Boolean = false,
     val error: String? = null,
-    val updateSuccess: Boolean = false
+    val updateSuccess: Boolean = false,
+    val showDatePicker: Boolean = false
 )
 
 class ProfileViewModel : ViewModel() {
@@ -38,22 +37,24 @@ class ProfileViewModel : ViewModel() {
     }
 
     private fun fetchProfile() {
-        val user = supabase.auth.currentUserOrNull() ?: return
+        val currentUserId = CurrentUser.userId ?: return
+        
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
             try {
+                // Fetch profile using local session ID
                 val profile = supabase.from("profiles").select {
-                    filter { eq("id", user.id) }
+                    filter { eq("profile_id", currentUserId) }
                 }.decodeSingleOrNull<UserProfile>()
                 
-                Log.d("ProfileVM", "Fetched Profile: $profile (UID: ${user.id})")
+                Log.d("ProfileVM", "Fetched Profile: $profile (UID: $currentUserId)")
                 
                 profile?.let { p ->
                     _state.update { 
                         it.copy(
                             userProfile = p,
                             name = p.name,
-                            birthday = p.birthday ?: "",
+                            birthday = p.birthday,
                             email = p.email,
                             isLoading = false
                         )
@@ -73,25 +74,26 @@ class ProfileViewModel : ViewModel() {
     fun onEmailChange(newEmail: String) { _state.update { it.copy(email = newEmail) } }
     fun onCurrentPasswordChange(pwd: String) { _state.update { it.copy(currentPassword = pwd) } }
     fun onPasswordChange(newPassword: String) { _state.update { it.copy(password = newPassword) } }
+    fun setShowDatePicker(show: Boolean) { _state.update { it.copy(showDatePicker = show) } }
 
     fun uploadAvatar(byteArray: ByteArray) {
-        val user = supabase.auth.currentUserOrNull() ?: return
+        val currentUserId = CurrentUser.userId ?: return
+        
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
             try {
-                val fileName = "avatar_${user.id}_${System.currentTimeMillis()}.jpg"
+                val fileName = "avatar_${currentUserId}_${System.currentTimeMillis()}.jpg"
                 val bucket = supabase.storage.from("avatars")
                 
                 Log.d("ProfileVM", "Uploading to avatars/$fileName")
-                // Perform upload
                 bucket.upload(fileName, byteArray) { upsert = true }
                 
                 val publicUrl = bucket.publicUrl(fileName)
                 Log.d("ProfileVM", "Upload Success. Public URL: $publicUrl")
                 
-                // Update profile table and wait for response
+                // Update profile table using direct Postgrest update
                 supabase.from("profiles").update(mapOf("avatar_url" to publicUrl)) {
-                    filter { eq("id", user.id) }
+                    filter { eq("profile_id", currentUserId) }
                 }
                 
                 _state.update { it.copy(updateSuccess = true) }
@@ -104,56 +106,39 @@ class ProfileViewModel : ViewModel() {
     }
 
     fun saveProfile() {
-        val user = supabase.auth.currentUserOrNull() ?: return
+        val currentUserId = CurrentUser.userId ?: return
         val currentState = _state.value
         
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null, updateSuccess = false) }
             try {
-                // 1. Update Profile Fields
-                val updates = mutableMapOf<String, String>()
-                if (currentState.name != currentState.userProfile?.name) updates["name"] = currentState.name
-                if (currentState.birthday != currentState.userProfile?.birthday) updates["birthday"] = currentState.birthday
-                
-                if (updates.isNotEmpty()) {
-                    Log.d("ProfileVM", "Saving updates: $updates to UID: ${user.id}")
-                    supabase.from("profiles").update(updates) {
-                        filter { eq("id", user.id) }
+                // Verify current password manually from the fetched profile record
+                if (currentState.password.isNotEmpty() || currentState.email != currentState.userProfile?.email) {
+                    if (currentState.currentPassword != currentState.userProfile?.password) {
+                        _state.update { it.copy(isLoading = false, error = "Current password incorrect") }
+                        return@launch
                     }
                 }
 
-                // 2. Update Auth (Email/Password)
-                if (currentState.email != currentState.userProfile?.email || currentState.password.isNotEmpty()) {
-                    Log.d("ProfileVM", "Updating Auth settings...")
-                    
-                    // IF password is being changed, we MUST verify current password first
-                    if (currentState.password.isNotEmpty()) {
-                        if (currentState.currentPassword.isBlank()) {
-                            _state.update { it.copy(isLoading = false, error = "Please enter current password to set a new one") }
-                            return@launch
-                        }
-                        
-                        try {
-                            // Re-auth check
-                            supabase.auth.signInWith(io.github.jan.supabase.auth.providers.builtin.Email) {
-                                this.email = currentState.userProfile?.email ?: ""
-                                this.password = currentState.currentPassword
-                            }
-                        } catch (e: Exception) {
-                            _state.update { it.copy(isLoading = false, error = "Current password error") }
-                            return@launch
-                        }
-                    }
-
-                    supabase.auth.updateUser {
-                        if (currentState.email != currentState.userProfile?.email) email = currentState.email
-                        if (currentState.password.isNotEmpty()) password = currentState.password
+                // Update Profile Fields directly in the database
+                val updates = mutableMapOf<String, String>()
+                updates["name"] = currentState.name
+                updates["birthday"] = currentState.birthday
+                updates["email"] = currentState.email
+                if (currentState.password.isNotEmpty()) {
+                    updates["password"] = currentState.password
+                }
+                
+                if (updates.isNotEmpty()) {
+                    Log.d("ProfileVM", "Saving updates: $updates to UID: $currentUserId")
+                    supabase.from("profiles").update(updates) {
+                        filter { eq("profile_id", currentUserId) }
                     }
                 }
 
                 _state.update { it.copy(isLoading = false, updateSuccess = true, password = "", currentPassword = "") }
                 
-                // Important: Small delay before re-fetching to let Supabase catch up
+                // Re-fetch profile to sync UI
                 kotlinx.coroutines.delay(1000)
                 fetchProfile()
                 

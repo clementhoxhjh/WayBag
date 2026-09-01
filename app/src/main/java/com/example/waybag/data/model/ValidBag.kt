@@ -4,5 +4,5 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class ValidBag(
-    val unique_id: String
+    val bag_id: String
 )

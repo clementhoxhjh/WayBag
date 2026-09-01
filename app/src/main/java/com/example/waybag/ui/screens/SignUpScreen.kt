@@ -28,13 +28,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
-import com.example.waybag.data.model.UserProfile
 import com.example.waybag.data.supabase
 import com.example.waybag.ui.components.*
 import com.example.waybag.ui.theme.Apple_Blue
 import com.example.waybag.ui.theme.WayBag_Lime
-import io.github.jan.supabase.auth.auth
-import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.launch
@@ -42,39 +39,26 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.waybag.ui.viewmodel.SignUpViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SignUpScreen(
     onBackClick: () -> Unit,
-    onSignUpClick: () -> Unit
+    onSignUpClick: () -> Unit,
+    viewModel: SignUpViewModel = viewModel()
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val state by viewModel.state.collectAsState()
     val scrollState = rememberScrollState()
-
-    var name by rememberSaveable { mutableStateOf("") }
-    var birthday by rememberSaveable { mutableStateOf("") }
-    var email by rememberSaveable { mutableStateOf("") }
-    var password by rememberSaveable { mutableStateOf("") }
-    var confirmPassword by rememberSaveable { mutableStateOf("") }
-
-    var isLoading by rememberSaveable { mutableStateOf(false) }
-    var showSuccessDialog by rememberSaveable { mutableStateOf(false) }
-    var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
-    
-    // Image Selection States
-    var selectedImageUri by rememberSaveable { mutableStateOf<Uri?>(null) }
-    var showImageSourceSheet by rememberSaveable { mutableStateOf(false) }
-    var cameraImageUri by rememberSaveable { mutableStateOf<Uri?>(null) }
 
     // Launcher for Gallery
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            selectedImageUri = uri
+            viewModel.onImageSelected(uri)
         }
     }
 
@@ -82,8 +66,8 @@ fun SignUpScreen(
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
-        if (success && cameraImageUri != null) {
-            selectedImageUri = cameraImageUri
+        if (success && state.cameraImageUri != null) {
+            viewModel.onImageSelected(state.cameraImageUri)
         }
     }
 
@@ -94,15 +78,15 @@ fun SignUpScreen(
         return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
     }
 
-    if (showSuccessDialog) {
+    if (state.showSuccessDialog) {
         AlertDialog(
             onDismissRequest = { 
-                showSuccessDialog = false
+                viewModel.setShowSuccessDialog(false)
                 onSignUpClick() 
             },
             confirmButton = {
                 WayBagButton(text = "OK", onClick = { 
-                    showSuccessDialog = false
+                    viewModel.setShowSuccessDialog(false)
                     onSignUpClick() 
                 }, modifier = Modifier.fillMaxWidth())
             },
@@ -113,24 +97,24 @@ fun SignUpScreen(
         )
     }
 
-    if (errorMessage != null) {
+    if (state.errorMessage != null) {
         AlertDialog(
-            onDismissRequest = { errorMessage = null },
+            onDismissRequest = { viewModel.clearError() },
             confirmButton = {
-                TextButton(onClick = { errorMessage = null }) {
+                TextButton(onClick = { viewModel.clearError() }) {
                     Text("OK", color = Color.Red)
                 }
             },
             title = { Text("Error", color = Color.Red) },
-            text = { Text(errorMessage!!) },
+            text = { Text(state.errorMessage!!) },
             shape = RoundedCornerShape(28.dp),
             containerColor = Color.White
         )
     }
 
-    if (showImageSourceSheet) {
+    if (state.showImageSourceSheet) {
         ModalBottomSheet(
-            onDismissRequest = { showImageSourceSheet = false },
+            onDismissRequest = { viewModel.setShowImageSourceSheet(false) },
             containerColor = Color.White
         ) {
             Column(
@@ -142,9 +126,9 @@ fun SignUpScreen(
                     headlineContent = { Text("Take Photo") },
                     leadingContent = { Icon(Icons.Default.CameraAlt, contentDescription = null) },
                     modifier = Modifier.clickable {
-                        showImageSourceSheet = false
+                        viewModel.setShowImageSourceSheet(false)
                         val uri = createTempPictureUri()
-                        cameraImageUri = uri
+                        viewModel.onCameraImageUriCreated(uri)
                         cameraLauncher.launch(uri)
                     }
                 )
@@ -152,7 +136,7 @@ fun SignUpScreen(
                     headlineContent = { Text("Choose from Gallery") },
                     leadingContent = { Icon(Icons.Default.PhotoLibrary, contentDescription = null) },
                     modifier = Modifier.clickable {
-                        showImageSourceSheet = false
+                        viewModel.setShowImageSourceSheet(false)
                         galleryLauncher.launch("image/*")
                     }
                 )
@@ -194,7 +178,7 @@ fun SignUpScreen(
                     // Profile Pic Selector (Floating)
                     Box(
                         modifier = Modifier
-                            .clickable { showImageSourceSheet = true },
+                            .clickable { viewModel.setShowImageSourceSheet(true) },
                         contentAlignment = Alignment.BottomEnd
                     ) {
                         Box(
@@ -205,9 +189,9 @@ fun SignUpScreen(
                                 .border(1.dp, Color.Black.copy(alpha = 0.1f), CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            if (selectedImageUri != null) {
+                            if (state.selectedImageUri != null) {
                                 AsyncImage(
-                                    model = selectedImageUri,
+                                    model = state.selectedImageUri,
                                     contentDescription = "Profile Picture",
                                     modifier = Modifier.fillMaxSize().clip(CircleShape),
                                     contentScale = ContentScale.Crop
@@ -231,82 +215,55 @@ fun SignUpScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(20.dp)
                     ) {
-                        WayBagTextField(value = name, onValueChange = { name = it }, label = "Name", placeholder = "Insert full name")
-                        WayBagTextField(value = birthday, onValueChange = { birthday = it }, label = "Birthday", placeholder = "DD/MM/YYYY")
-                        WayBagTextField(value = email, onValueChange = { email = it }, label = "Email", placeholder = "name@example.com")
-                        WayBagTextField(value = password, onValueChange = { password = it }, label = "Password", placeholder = "Minimum 8 characters", isPassword = true)
-                        WayBagTextField(value = confirmPassword, onValueChange = { confirmPassword = it }, label = "Confirm Password", placeholder = "Repeat password", isPassword = true)
+                        WayBagTextField(value = state.name, onValueChange = { viewModel.onNameChange(it) }, label = "Name", placeholder = "Insert full name")
+                        
+                        Box(modifier = Modifier.fillMaxWidth().clickable { viewModel.setShowDatePicker(true) }) {
+                            WayBagTextField(
+                                value = state.birthday,
+                                onValueChange = { },
+                                label = "Birthday",
+                                placeholder = "Select birthday",
+                                readOnly = true,
+                                enabled = false,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        WayBagTextField(value = state.email, onValueChange = { viewModel.onEmailChange(it) }, label = "Email", placeholder = "name@example.com")
+                        WayBagTextField(value = state.password, onValueChange = { viewModel.onPasswordChange(it) }, label = "Password", placeholder = "Minimum 8 characters", isPassword = true)
+                        WayBagTextField(value = state.confirmPassword, onValueChange = { viewModel.onConfirmPasswordChange(it) }, label = "Confirm Password", placeholder = "Repeat password", isPassword = true)
+                    }
+
+                    if (state.showDatePicker) {
+                        val datePickerState = rememberDatePickerState()
+                        DatePickerDialog(
+                            onDismissRequest = { viewModel.setShowDatePicker(false) },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    datePickerState.selectedDateMillis?.let {
+                                        val date = Date(it)
+                                        val formattedDate = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(date)
+                                        viewModel.onBirthdayChange(formattedDate)
+                                    }
+                                    viewModel.setShowDatePicker(false)
+                                }) {
+                                    Text("OK")
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { viewModel.setShowDatePicker(false) }) {
+                                    Text("Cancel")
+                                }
+                            }
+                        ) {
+                            DatePicker(state = datePickerState)
+                        }
                     }
 
                     WayBagButton(
-                        text = if (isLoading) "Creating..." else "Sign Up",
+                        text = if (state.isLoading) "Creating..." else "Sign Up",
                         onClick = {
-                            if (password != confirmPassword) {
-                                errorMessage = "Passwords do not match"
-                                return@WayBagButton
-                            }
-                            if (email.isBlank() || password.isBlank() || name.isBlank()) {
-                                errorMessage = "Please fill all fields"
-                                return@WayBagButton
-                            }
-                            
-                            isLoading = true
-                            scope.launch {
-                                try {
-                                    val result = supabase.auth.signUpWith(Email) {
-                                        this.email = email
-                                        this.password = password
-                                    }
-                                    
-                                    val userId = result?.id
-                                    if (userId != null) {
-                                        var avatarUrl: String? = null
-                                        selectedImageUri?.let { uri ->
-                                            val bytes = context.contentResolver.openInputStream(uri)?.readBytes()
-                                            if (bytes != null) {
-                                                val fileName = "avatar_${userId}_${System.currentTimeMillis()}.jpg"
-                                                val bucket = supabase.storage.from("avatars")
-                                                bucket.upload(fileName, bytes)
-                                                avatarUrl = bucket.publicUrl(fileName)
-                                            }
-                                        }
-
-                                        val profile = UserProfile(
-                                            id = userId,
-                                            name = name,
-                                            birthday = birthday,
-                                            email = email,
-                                            avatar_url = avatarUrl
-                                        )
-                                        supabase.from("profiles").insert(profile)
-                                        
-                                        // NEW: Save session locally after successful signup
-                                        com.example.waybag.data.saveLoginStatus(context, true)
-                                        com.example.waybag.data.saveUserSession(
-                                            context,
-                                            com.example.waybag.data.UserSession(
-                                                userId = userId,
-                                                email = email,
-                                                name = name
-                                            )
-                                        )
-                                        
-                                        showSuccessDialog = true
-                                    } else {
-                                        errorMessage = "Sign up failed: User ID is null"
-                                    }
-                                } catch (e: Exception) {
-                                    val message = e.message ?: ""
-                                    if (message.contains("User already registered", ignoreCase = true) || 
-                                        message.contains("already exists", ignoreCase = true)) {
-                                        errorMessage = "email is already sign in"
-                                    } else {
-                                        errorMessage = e.message ?: "An unexpected error occurred"
-                                    }
-                                } finally {
-                                    isLoading = false
-                                }
-                            }
+                            viewModel.signUp(context)
                         },
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -314,7 +271,7 @@ fun SignUpScreen(
                     Spacer(modifier = Modifier.height(40.dp))
                 }
                 
-                if (isLoading) {
+                if (state.isLoading) {
                     Box(
                         modifier = Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.5f)).clickable(enabled = false) {},
                         contentAlignment = Alignment.Center

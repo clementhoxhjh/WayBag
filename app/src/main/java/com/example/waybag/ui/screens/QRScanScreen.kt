@@ -40,7 +40,6 @@ import com.example.waybag.ui.viewmodel.QRScanViewModel
 import com.example.waybag.utils.DateUtils
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
-import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -257,7 +256,9 @@ fun SuccessState(uniqueId: String, timestamp: String, onReset: () -> Unit) {
     val displayTime = remember(timestamp) {
         val date = DateUtils.parseIsoTimestamp(timestamp)
         if (date != null) {
-            SimpleDateFormat("hh:mm a", Locale.getDefault()).format(date)
+            SimpleDateFormat("hh:mm a", Locale.getDefault()).apply {
+                timeZone = TimeZone.getTimeZone("GMT+8")
+            }.format(date)
         } else {
             timestamp.take(16).replace('T', ' ')
         }
@@ -378,40 +379,35 @@ fun ErrorState(message: String, onReset: () -> Unit) {
 
 private suspend fun recordScan(barcodeValue: String): String? {
     val uniqueId = barcodeValue.trim()
+    val currentUserId = com.example.waybag.data.CurrentUser.userId
     
     try {
         val response = supabase.from("valid_bags")
             .select {
-                filter { eq("unique_id", uniqueId) }
+                filter { eq("bag_id", uniqueId) }
             }
         
         val validBag = response.decodeSingleOrNull<ValidBag>()
-        val user = supabase.auth.currentUserOrNull()
-        
-        // Use local timezone format (e.g. +0800) for easier reading in DB
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.US)
+
+        // Use GMT+8 (Malaysia Time) for DB records
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("GMT+8")
+        }
         val timestamp = sdf.format(Date())
-        Log.d("QRScan", "Recording with local timestamp: $timestamp")
+        Log.d("QRScan", "Recording with UTC+8 timestamp: $timestamp")
 
         if (validBag == null) {
-            if (user != null) {
-                val failedScan = BagScan(
-                    userId = user.id,
-                    bagUniqueId = uniqueId,
-                    scanQR = timestamp,
-                    status = "failed",
-                    failureReason = "Invalid QR Code: Bag not registered"
-                )
-                supabase.from("bag_scans").insert(failedScan)
-            }
+            // REMOVED: Inserting a failed scan into bag_scans table.
+            // Since bag_id is a Foreign Key to valid_bags, we cannot insert 
+            // a record with a bag_id that doesn't exist in that table.
             return null
         }
 
-        if (user != null) {
+        if (currentUserId != null) {
             val scan = BagScan(
-                userId = user.id,
-                bagUniqueId = uniqueId,
-                scanQR = timestamp,
+                profile_id = currentUserId,
+                bag_id = uniqueId,
+                scan_qr = timestamp,
                 status = "pending"
             )
             supabase.from("bag_scans").insert(scan)

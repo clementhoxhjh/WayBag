@@ -30,7 +30,9 @@ fun WayBagTextField(
     label: String,
     placeholder: String,
     modifier: Modifier = Modifier,
-    isPassword: Boolean = false
+    isPassword: Boolean = false,
+    readOnly: Boolean = false,
+    enabled: Boolean = true
 ) {
     var isFocused by remember { mutableStateOf(false) }
     var passwordVisible by remember { mutableStateOf(false) }
@@ -82,6 +84,8 @@ fun WayBagTextField(
                         keyboardOptions = KeyboardOptions(
                             keyboardType = if (isPassword) KeyboardType.Password else KeyboardType.Text
                         ),
+                        readOnly = readOnly,
+                        enabled = enabled,
                         decorationBox = { innerTextField ->
                             innerTextField()
                         }

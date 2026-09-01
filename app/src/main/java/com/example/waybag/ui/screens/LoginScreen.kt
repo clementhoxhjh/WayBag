@@ -1,5 +1,7 @@
 package com.example.waybag.ui.screens
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -10,38 +12,34 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.waybag.ui.components.*
 import com.example.waybag.ui.theme.Apple_Blue
 import com.example.waybag.ui.theme.Premium_Gray
-import com.example.waybag.data.supabase
-import io.github.jan.supabase.auth.auth
-import io.github.jan.supabase.auth.providers.builtin.Email
-import io.github.jan.supabase.postgrest.from
+import com.example.waybag.ui.viewmodel.LoginViewModel
 import androidx.compose.foundation.shape.RoundedCornerShape
-import kotlinx.coroutines.launch
-import androidx.compose.runtime.saveable.rememberSaveable
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
     onBackClick: () -> Unit,
-    onLoginClick: () -> Unit
+    onLoginClick: () -> Unit,
+    viewModel: LoginViewModel = viewModel()
 ) {
     val context = LocalContext.current
-    var email by rememberSaveable { mutableStateOf("") }
-    var password by rememberSaveable { mutableStateOf("") }
-    var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    val state by viewModel.state.collectAsState()
+    val scrollState = rememberScrollState()
 
-    if (errorMessage != null) {
+    if (state.errorMessage != null) {
         AlertDialog(
-            onDismissRequest = { errorMessage = null },
+            onDismissRequest = { viewModel.clearError() },
             confirmButton = {
-                TextButton(onClick = { errorMessage = null }) {
+                TextButton(onClick = { viewModel.clearError() }) {
                     Text("OK", color = Color.Red)
                 }
             },
             title = { Text("Login Error", color = Color.Red) },
-            text = { Text(errorMessage!!) },
+            text = { Text(state.errorMessage!!) },
             shape = RoundedCornerShape(28.dp),
             containerColor = Color.White
         )
@@ -69,6 +67,7 @@ fun LoginScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
+                    .verticalScroll(scrollState)
                     .padding(horizontal = 32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -83,90 +82,28 @@ fun LoginScreen(
                     verticalArrangement = Arrangement.spacedBy(28.dp)
                 ) {
                     WayBagTextField(
-                        value = email,
-                        onValueChange = { email = it },
+                        value = state.email,
+                        onValueChange = { viewModel.onEmailChange(it) },
                         label = "Email",
                         placeholder = "name@example.com"
                     )
 
                     WayBagTextField(
-                        value = password,
-                        onValueChange = { password = it },
+                        value = state.password,
+                        onValueChange = { viewModel.onPasswordChange(it) },
                         label = "Password",
                         placeholder = "Enter your password",
                         isPassword = true
                     )
                 }
 
+                Spacer(modifier = Modifier.height(32.dp))
                 Spacer(modifier = Modifier.weight(1f))
 
-                val scope = rememberCoroutineScope()
-                var isLoading by remember { mutableStateOf(false) }
-
                 WayBagButton(
-                    text = if (isLoading) "Logging in..." else "Login",
+                    text = if (state.isLoading) "Logging in..." else "Login",
                     onClick = {
-                        if (email.isBlank() || password.isBlank()) {
-                            errorMessage = "Please enter both email and password"
-                            return@WayBagButton
-                        }
-                        isLoading = true
-                        scope.launch {
-                            try {
-                                supabase.auth.signInWith(Email) {
-                                    this.email = email
-                                    this.password = password
-                                }
-                                
-                                // NEW: Save session locally after successful login
-                                val user = supabase.auth.currentUserOrNull()
-                                if (user != null) {
-                                    val profile = supabase.from("profiles").select {
-                                        filter { eq("id", user.id) }
-                                    }.decodeSingleOrNull<com.example.waybag.data.model.UserProfile>()
-                                    
-                                    if (profile != null) {
-                                        com.example.waybag.data.saveLoginStatus(context, true)
-                                        com.example.waybag.data.saveUserSession(
-                                            context,
-                                            com.example.waybag.data.UserSession(
-                                                userId = user.id,
-                                                email = user.email ?: "",
-                                                name = profile.name
-                                            )
-                                        )
-                                    }
-                                }
-                                
-                                onLoginClick()
-                            } catch (e: Exception) {
-                                val message = e.message ?: ""
-                                when {
-                                    message.contains("Invalid login credentials", ignoreCase = true) -> {
-                                        // To distinguish between "email not found" and "wrong password",
-                                        // we check if the user exists in our profiles table.
-                                        try {
-                                            val userExists = supabase.from("profiles").select {
-                                                filter { eq("email", email) }
-                                            }.decodeList<com.example.waybag.data.model.UserProfile>().isNotEmpty()
-                                            
-                                            if (userExists) {
-                                                errorMessage = "password error"
-                                            } else {
-                                                errorMessage = "email haven't sign in, please go to sign in, tq"
-                                            }
-                                        } catch (dbEx: Exception) {
-                                            errorMessage = "password error" // Fallback if DB check fails
-                                        }
-                                    }
-                                    else -> {
-                                        errorMessage = e.localizedMessage ?: "An unexpected error occurred"
-                                    }
-                                }
-                            } finally {
-                                isLoading = false
-                            }
-                        }
+                        viewModel.login(context, onLoginClick)
                     },
                     modifier = Modifier.fillMaxWidth()
                 )

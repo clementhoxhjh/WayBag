@@ -8,8 +8,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.waybag.BuildConfig
 import com.example.waybag.data.model.BagScan
 import com.example.waybag.data.supabase
+import com.example.waybag.data.CurrentUser
 import com.example.waybag.utils.DateUtils
-import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.storage.storage
 import io.ktor.client.*
@@ -20,6 +20,7 @@ import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -74,17 +75,48 @@ class AITrackerViewModel : ViewModel() {
     }
 
     fun fetchPendingScans() {
-        val user = supabase.auth.currentUserOrNull() ?: return
+        val currentUserId = CurrentUser.userId ?: return
+        
         viewModelScope.launch {
             _state.update { it.copy(isRefreshing = true) }
             try {
-                val scans = supabase.from("bag_scans").select {
+                // 1. Fetch current pending scans
+                val allPending = supabase.from("bag_scans").select {
                     filter {
-                        eq("userId", user.id)
+                        eq("profile_id", currentUserId)
                         eq("status", "pending")
                     }
                 }.decodeList<BagScan>()
-                _state.update { it.copy(pendingScans = scans, isRefreshing = false) }
+
+                // 2. Identify expired scans (Pending > 20 mins)
+                val now = Date()
+                val expiredIds = allPending.filter { scan ->
+                    val scanDate = DateUtils.parseIsoTimestamp(scan.scan_qr)
+                    val isExpired = scanDate != null && (now.time - scanDate.time) > 20 * 60 * 1000
+                    isExpired
+                }.mapNotNull { it.scan_id }
+
+                // 3. Batch update expired scans in database
+                if (expiredIds.isNotEmpty()) {
+                    try {
+                        supabase.from("bag_scans").update({
+                            set("status", "failed")
+                            set("failure_reason", "EXPIRED (Over 20 mins)")
+                        }) {
+                            filter {
+                                isIn("scan_id", expiredIds)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("AITracker", "Expiration update failed", e)
+                    }
+                }
+
+                // 4. Update state with only non-expired pending scans
+                val validPending = allPending.filterNot { scan -> 
+                    expiredIds.contains(scan.scan_id)
+                }
+                _state.update { it.copy(pendingScans = validPending, isRefreshing = false) }
             } catch (t: Throwable) {
                 Log.e("AITracker", "Fetch failed", t)
                 _state.update { it.copy(isRefreshing = false) }
@@ -212,7 +244,7 @@ class AITrackerViewModel : ViewModel() {
                     // Upload the receipt image
                     val receiptUrl = withContext(Dispatchers.IO) {
                         try {
-                            val fileName = "receipt_${selectedScan.id}_${System.currentTimeMillis()}.jpg"
+                            val fileName = "receipt_${selectedScan.scan_id}_${System.currentTimeMillis()}.jpg"
                             val bucket = supabase.storage.from("receipts")
                             val outputStream = ByteArrayOutputStream()
                             bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
@@ -251,19 +283,26 @@ class AITrackerViewModel : ViewModel() {
                 missingFields.add("Receipt Time")
             }
 
-            // 1. Check for Duplicate Receipt (Strictly by regNo as requested)
+            // 1. Check for Duplicate Receipt
             try {
                 val duplicateCount = supabase.from("bag_scans").select {
                     filter {
-                        eq("regNo", analysis.regNo)
-                        eq("totalAmount", amountValue)
+                        eq("reg_no", analysis.regNo)
+                        eq("total_amount", amountValue)
                         eq("status", "completed")
                     }
                 }.decodeList<BagScan>().size
 
                 if (duplicateCount > 0) {
-                    _state.update { it.copy(validationMessage = "FAILED: This receipt (RegNo: ${analysis.regNo}) has already been recorded.") }
+                    val errorMsg = "FAILED: This receipt (RegNo: ${analysis.regNo}) has already been recorded."
+                    _state.update { it.copy(validationMessage = errorMsg, isSuccess = false) }
+                    
+                    // Record to DB as failed right away
                     saveResultsToDatabaseInScope(scan, analysis, "failed", receiptImageUrl)
+                    
+                    // Automatically clear selection after a short delay so user sees the error
+                    delay(3000)
+                    selectScan(null)
                     return@launch
                 }
             } catch (e: Exception) {
@@ -291,7 +330,7 @@ class AITrackerViewModel : ViewModel() {
             // 4. Time Window Check (Production Logic: 20 mins)
             try {
                 val receiptDate = parseSimpleIso(analysis.timestamp)
-                val scanDate = DateUtils.parseIsoTimestamp(scan.scanQR)
+                val scanDate = DateUtils.parseIsoTimestamp(scan.scan_qr)
 
                 if (receiptDate != null && scanDate != null) {
                     val diffMillis = Math.abs(receiptDate.time - scanDate.time)
@@ -318,15 +357,15 @@ class AITrackerViewModel : ViewModel() {
 
             supabase.from("bag_scans").update({
                 set("status", status)
-                set("storeName", analysis.storeName)
-                set("regNo", analysis.regNo)
-                set("totalAmount", amountValue)
-                set("itemsJson", itemsJson)
-                set("receiptTimestamp", analysis.timestamp) // Save the receipt time
-                set("receiptImageUrl", receiptImageUrl) // Save the image URL
-                set("failureReason", reason) // Save why it failed
+                set("store_name", analysis.storeName)
+                set("reg_no", analysis.regNo)
+                set("total_amount", amountValue)
+                set("items_json", itemsJson)
+                set("receipt_timestamp", analysis.timestamp) // Save the receipt time
+                set("receipt_image_url", receiptImageUrl) // Save the image URL
+                set("failure_reason", reason) // Save why it failed
             }) {
-                filter { eq("id", scan.id ?: 0L) }
+                filter { eq("scan_id", scan.scan_id ?: 0L) }
             }
             fetchPendingScans()
         } catch (e: Exception) {
@@ -348,6 +387,7 @@ class AITrackerViewModel : ViewModel() {
         for (fmt in formats) {
             try { 
                 val sdf = SimpleDateFormat(fmt, Locale.US).apply { 
+                    // Force Malaysia time for parsing receipt times
                     timeZone = TimeZone.getDefault()
                     isLenient = false 
                 }

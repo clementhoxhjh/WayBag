@@ -44,6 +44,9 @@ import com.example.waybag.ui.theme.WayBag_Lime
 import com.example.waybag.ui.theme.Premium_Gray
 import com.example.waybag.ui.viewmodel.AITrackerViewModel
 import com.example.waybag.ui.viewmodel.AITrackerState
+import com.example.waybag.utils.DateUtils
+import java.text.SimpleDateFormat
+import java.util.*
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -62,6 +65,10 @@ fun AITrackerScreen(
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
 
+    LaunchedEffect(Unit) {
+        viewModel.fetchPendingScans()
+    }
+    
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -105,7 +112,7 @@ fun AITrackerScreen(
             }
             else -> {
                 ReceiptCameraView(
-                    selectedBagId = state.selectedScan?.bagUniqueId ?: "",
+                    selectedBagId = state.selectedScan?.bag_id ?: "",
                     onImageCaptured = { viewModel.analyzeReceipt(it) },
                     onGalleryClick = { galleryLauncher.launch("image/*") },
                     onCancel = { viewModel.selectScan(null) }
@@ -236,6 +243,14 @@ fun PendingScansList(
                 }
                 
                 items(scans) { scan ->
+                    val displayTime = remember(scan.scan_qr) {
+                        DateUtils.parseIsoTimestamp(scan.scan_qr)?.let {
+                            SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).apply {
+                                timeZone = TimeZone.getTimeZone("GMT+8")
+                            }.format(it)
+                        } ?: scan.scan_qr.take(16).replace('T', ' ')
+                    }
+                    
                     ThinGlassPanel(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -248,8 +263,8 @@ fun PendingScansList(
                             Icon(Icons.Default.Receipt, contentDescription = null, tint = WayBag_Lime)
                             Spacer(modifier = Modifier.width(16.dp))
                             Column {
-                                Text(text = "Bag #${scan.bagUniqueId}", fontWeight = FontWeight.Bold)
-                                Text(text = "Scanned at: ${scan.scanQR.take(16).replace('T', ' ')}", fontSize = 12.sp, color = Color.Gray)
+                                Text(text = "Bag #${scan.bag_id}", fontWeight = FontWeight.Bold)
+                                Text(text = "Scanned at: $displayTime", fontSize = 12.sp, color = Color.Gray)
                             }
                         }
                     }
@@ -466,7 +481,19 @@ fun ResultState(
                     
                     ResultRow("Store", state.analysisResult?.storeName ?: "", color = if (state.isSuccess) WayBag_Lime else Color.Red)
                     ResultRow("Total", "RM ${state.analysisResult?.totalAmount ?: "0.00"}", color = if (state.isSuccess) WayBag_Lime else Color.Red)
-                    ResultRow("Date", state.analysisResult?.timestamp?.take(16)?.replace('T', ' ') ?: "", color = if (state.isSuccess) WayBag_Lime else Color.Red)
+                    val displayDate = remember(state.analysisResult?.timestamp) {
+                        state.analysisResult?.timestamp?.let { ts ->
+                            if (ts == "MISSING") "MISSING"
+                            else {
+                                DateUtils.parseIsoTimestamp(ts)?.let {
+                                    SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).apply {
+                                        timeZone = TimeZone.getTimeZone("GMT+8")
+                                    }.format(it)
+                                } ?: ts.take(16).replace('T', ' ')
+                            }
+                        } ?: ""
+                    }
+                    ResultRow("Date", displayDate, color = if (state.isSuccess) WayBag_Lime else Color.Red)
                     val plasticDetected = state.analysisResult?.hasPlasticBag?.lowercase().let { it == "true" || it == "yes" }
                     ResultRow("WayBag", if (plasticDetected) "DETECTED" else "None", color = if (state.isSuccess) WayBag_Lime else Color.Red)
                     

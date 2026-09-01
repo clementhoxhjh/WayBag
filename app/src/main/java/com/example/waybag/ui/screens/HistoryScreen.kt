@@ -37,6 +37,11 @@ fun HistoryScreen(
     viewModel: HistoryViewModel = viewModel()
 ) {
     val state by viewModel.state.collectAsState()
+
+    LaunchedEffect(Unit) {
+        viewModel.fetchHistory()
+    }
+    
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
@@ -138,35 +143,35 @@ fun ScanDetailView(scan: BagScan, onDismiss: () -> Unit) {
                     valueColor = if (scan.status.lowercase() == "completed") Color(0xFF4B8B00) else Color.Red
                 )
                 
-                if (scan.status.lowercase() == "failed" && scan.failureReason != null) {
-                    DetailRow("Failure Reason", scan.failureReason, Color.Red)
+                if (scan.status.lowercase() == "failed" && scan.failure_reason != null) {
+                    DetailRow("Failure Reason", scan.failure_reason, Color.Red)
                 }
 
-                val scanTime = remember(scan.scanQR) {
-                    DateUtils.parseIsoTimestamp(scan.scanQR)?.let {
+                val scanTime = remember(scan.scan_qr) {
+                    DateUtils.parseIsoTimestamp(scan.scan_qr)?.let {
                         SimpleDateFormat("MMM dd, yyyy hh:mm a", Locale.getDefault()).format(it)
-                    } ?: scan.scanQR
+                    } ?: scan.scan_qr
                 }
                 DetailRow("Scan QR Time", scanTime)
 
-                val receiptTime = remember(scan.receiptTimestamp) {
-                    if (scan.receiptTimestamp == null || scan.receiptTimestamp == "MISSING") {
+                val receiptTime = remember(scan.receipt_timestamp) {
+                    if (scan.receipt_timestamp == null || scan.receipt_timestamp == "MISSING") {
                         "MISSING"
                     } else {
                         // Attempt to format if it's ISO
                         try {
                             val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
-                            val date = sdf.parse(scan.receiptTimestamp)
+                            val date = sdf.parse(scan.receipt_timestamp)
                             SimpleDateFormat("MMM dd, yyyy hh:mm a", Locale.getDefault()).format(date!!)
                         } catch (e: Exception) {
-                            scan.receiptTimestamp
+                            scan.receipt_timestamp
                         }
                     }
                 }
                 DetailRow("Receipt Time", receiptTime)
                 
-                DetailRow("Reg No", scan.regNo ?: "N/A")
-                DetailRow("Store", scan.storeName ?: "N/A")
+                DetailRow("Reg No", scan.reg_no ?: "N/A")
+                DetailRow("Store", scan.store_name ?: "N/A")
 
                 Spacer(modifier = Modifier.height(8.dp))
                 
@@ -176,9 +181,9 @@ fun ScanDetailView(scan: BagScan, onDismiss: () -> Unit) {
                     color = Color.Gray
                 )
                 
-                if (scan.receiptImageUrl != null) {
+                if (scan.receipt_image_url != null) {
                     AsyncImage(
-                        model = scan.receiptImageUrl,
+                        model = scan.receipt_image_url,
                         contentDescription = "Receipt Image",
                         modifier = Modifier
                             .fillMaxWidth()
@@ -220,18 +225,18 @@ fun DetailRow(label: String, value: String, valueColor: Color = Color.Unspecifie
 
 @Composable
 fun HistoryItem(scan: BagScan, onClick: () -> Unit) {
-    val displayTime = remember(scan.scanQR) {
-        val date = DateUtils.parseIsoTimestamp(scan.scanQR)
+    val displayTime = remember(scan.scan_qr) {
+        val date = DateUtils.parseIsoTimestamp(scan.scan_qr)
         if (date != null) {
             SimpleDateFormat("MMM dd, hh:mm a", Locale.getDefault()).format(date)
         } else {
-            scan.scanQR.take(16).replace('T', ' ')
+            scan.scan_qr.take(16).replace('T', ' ')
         }
     }
 
-    val isExpired = remember(scan.scanQR, scan.status) {
+    val isExpired = remember(scan.scan_qr, scan.status) {
         if (scan.status.lowercase() == "pending") {
-            val scanDate = DateUtils.parseIsoTimestamp(scan.scanQR)
+            val scanDate = DateUtils.parseIsoTimestamp(scan.scan_qr)
             scanDate != null && (System.currentTimeMillis() - scanDate.time) > 20 * 60 * 1000
         } else false
     }
@@ -257,7 +262,7 @@ fun HistoryItem(scan: BagScan, onClick: () -> Unit) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Bag #${scan.bagUniqueId}",
+                    text = "Bag #${scan.bag_id}",
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.bodyLarge
                 )

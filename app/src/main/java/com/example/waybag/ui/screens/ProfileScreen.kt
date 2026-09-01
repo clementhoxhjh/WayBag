@@ -30,8 +30,8 @@ import com.example.waybag.ui.components.*
 import com.example.waybag.ui.viewmodel.ProfileViewModel
 import com.example.waybag.ui.theme.*
 import kotlinx.coroutines.launch
-import com.example.waybag.data.supabase
-import io.github.jan.supabase.auth.auth
+import java.text.SimpleDateFormat
+import java.util.*
 
 @Composable
 fun ProfileScreen(
@@ -57,14 +57,8 @@ fun ProfileScreen(
                 TextButton(onClick = {
                     showLogoutDialog = false
                     scope.launch {
-                        try {
-                            supabase.auth.signOut()
-                            com.example.waybag.data.clearStorage(context)
-                            onLogoutClick()
-                        } catch (e: Exception) {
-                            com.example.waybag.data.clearStorage(context)
-                            onLogoutClick()
-                        }
+                        com.example.waybag.data.clearStorage(context)
+                        onLogoutClick()
                     }
                 }) {
                     Text("Log Out", color = Color.Red, fontWeight = FontWeight.Bold)
@@ -91,194 +85,231 @@ fun ProfileScreen(
     }
 
     GlassBackground {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .padding(horizontal = if (isLandscape) 80.dp else 24.dp)
-                .padding(top = 24.dp, bottom = 24.dp)
-                .verticalScroll(scrollState),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Box(modifier = Modifier.widthIn(max = 500.dp)) {
-                Column {
-                    // Header
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = onBackClick) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                tint = Premium_Gray
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Profile Settings",
-                            style = MaterialTheme.typography.headlineMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = Premium_Gray
-                            )
+        Scaffold(
+            topBar = {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = if (isLandscape) 80.dp else 24.dp)
+                        .padding(top = 16.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Premium_Gray
                         )
                     }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Profile Settings",
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = Premium_Gray
+                        )
+                    )
+                }
+            },
+            containerColor = Color.Transparent
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = if (isLandscape) 80.dp else 24.dp)
+                    .verticalScroll(scrollState),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(modifier = Modifier.widthIn(max = 500.dp)) {
+                    Column {
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    // Profile Card
-                    ThinGlassPanel(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .padding(24.dp)
-                                .fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                        // Profile Card
+                        ThinGlassPanel(
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            // Avatar
-                            Box(
+                            Column(
                                 modifier = Modifier
-                                    .size(120.dp)
-                                    .clip(CircleShape)
-                                    .clickable { launcher.launch("image/*") }
+                                    .padding(24.dp)
+                                    .fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                if (state.userProfile?.avatar_url != null) {
-                                    AsyncImage(
-                                        model = state.userProfile?.avatar_url,
-                                        contentDescription = "Profile Avatar",
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                } else {
-                                    Surface(
-                                        modifier = Modifier.fillMaxSize(),
-                                        color = WayBag_Lime.copy(alpha = 0.2f)
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Text(
-                                                text = if (state.name.isNotEmpty()) state.name.take(1).uppercase() else "U",
-                                                style = MaterialTheme.typography.displaySmall,
-                                                color = WayBag_Lime
-                                            )
+                                // Avatar
+                                Box(
+                                    modifier = Modifier
+                                        .size(120.dp)
+                                        .clip(CircleShape)
+                                        .clickable { launcher.launch("image/*") }
+                                ) {
+                                    if (state.userProfile?.avatar_url != null) {
+                                        AsyncImage(
+                                            model = state.userProfile?.avatar_url,
+                                            contentDescription = "Profile Avatar",
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    } else {
+                                        Surface(
+                                            modifier = Modifier.fillMaxSize(),
+                                            color = WayBag_Lime.copy(alpha = 0.2f)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Text(
+                                                    text = if (state.name.isNotEmpty()) state.name.take(1).uppercase() else "U",
+                                                    style = MaterialTheme.typography.displaySmall,
+                                                    color = WayBag_Lime
+                                                )
+                                            }
                                         }
                                     }
                                 }
+
+                                Text(
+                                    text = "Change Avatar",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = WayBag_Lime,
+                                    modifier = Modifier.padding(top = 8.dp)
+                                )
+
+                                Spacer(modifier = Modifier.height(24.dp))
+
+                                // Fields
+                                WayBagTextField(
+                                    value = state.name,
+                                    onValueChange = { viewModel.onNameChange(it) },
+                                    label = "Full Name",
+                                    placeholder = "Enter your name",
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                WayBagTextField(
+                                    value = state.email,
+                                    onValueChange = { viewModel.onEmailChange(it) },
+                                    label = "Email Address",
+                                    placeholder = "Enter your email",
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                // Birthday with Date Picker
+                                Box(modifier = Modifier.fillMaxWidth().clickable { viewModel.setShowDatePicker(true) }) {
+                                    WayBagTextField(
+                                        value = state.birthday,
+                                        onValueChange = { },
+                                        label = "Birthday",
+                                        placeholder = "Select birthday",
+                                        readOnly = true,
+                                        enabled = false,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+
+                                if (state.showDatePicker) {
+                                    val datePickerState = rememberDatePickerState()
+                                    DatePickerDialog(
+                                        onDismissRequest = { viewModel.setShowDatePicker(false) },
+                                        confirmButton = {
+                                            TextButton(onClick = {
+                                                datePickerState.selectedDateMillis?.let {
+                                                    val date = Date(it)
+                                                    val formattedDate = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(date)
+                                                    viewModel.onBirthdayChange(formattedDate)
+                                                }
+                                                viewModel.setShowDatePicker(false)
+                                            }) {
+                                                Text("OK")
+                                            }
+                                        },
+                                        dismissButton = {
+                                            TextButton(onClick = { viewModel.setShowDatePicker(false) }) {
+                                                Text("Cancel")
+                                            }
+                                        }
+                                    ) {
+                                        DatePicker(state = datePickerState)
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                WayBagTextField(
+                                    value = state.currentPassword,
+                                    onValueChange = { viewModel.onCurrentPasswordChange(it) },
+                                    label = "Current Password",
+                                    placeholder = "Required to change password/email",
+                                    isPassword = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                WayBagTextField(
+                                    value = state.password,
+                                    onValueChange = { viewModel.onPasswordChange(it) },
+                                    label = "New Password",
+                                    placeholder = "Leave blank to keep current",
+                                    isPassword = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
                             }
+                        }
 
+                        Spacer(modifier = Modifier.height(32.dp))
+
+                        // Save Button
+                        WayBagButton(
+                            text = if (state.isLoading) "Saving..." else "Save Changes",
+                            onClick = { viewModel.saveProfile() },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Logout Button
+                        OutlinedButton(
+                            onClick = { showLogoutDialog = true },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                                .background(Color.Red.copy(alpha = 0.05f), RoundedCornerShape(25.dp))
+                                .clip(RoundedCornerShape(12.dp)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.Red.copy(alpha = 0.3f))
+                        ) {
+                            Text("Log Out", fontWeight = FontWeight.Bold, color = Color.Red.copy(alpha = 0.8f),)
+                        }
+
+                        if (state.error != null) {
                             Text(
-                                text = "Change Avatar",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = WayBag_Lime,
-                                modifier = Modifier.padding(top = 8.dp)
-                            )
-
-                            Spacer(modifier = Modifier.height(24.dp))
-
-                            // Fields
-                            WayBagTextField(
-                                value = state.name,
-                                onValueChange = { viewModel.onNameChange(it) },
-                                label = "Full Name",
-                                placeholder = "Enter your name",
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            WayBagTextField(
-                                value = state.email,
-                                onValueChange = { viewModel.onEmailChange(it) },
-                                label = "Email Address",
-                                placeholder = "Enter your email",
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            // Birthday
-                            WayBagTextField(
-                                value = state.birthday,
-                                onValueChange = { viewModel.onBirthdayChange(it) },
-                                label = "Birthday",
-                                placeholder = "DD/MM/YYYY",
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            WayBagTextField(
-                                value = state.currentPassword,
-                                onValueChange = { viewModel.onCurrentPasswordChange(it) },
-                                label = "Current Password",
-                                placeholder = "Required to change password/email",
-                                isPassword = true,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            WayBagTextField(
-                                value = state.password,
-                                onValueChange = { viewModel.onPasswordChange(it) },
-                                label = "New Password",
-                                placeholder = "Leave blank to keep current",
-                                isPassword = true,
-                                modifier = Modifier.fillMaxWidth()
+                                text = state.error!!,
+                                color = Color.Red,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 16.dp)
                             )
                         }
-                    }
 
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    // Save Button
-                    WayBagButton(
-                        text = if (state.isLoading) "Saving..." else "Save Changes",
-                        onClick = { viewModel.saveProfile() },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Logout Button
-                    OutlinedButton(
-                        onClick = { showLogoutDialog = true },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                            .background(Color.Red.copy(alpha = 0.05f), RoundedCornerShape(25.dp))
-                            .clip(RoundedCornerShape(12.dp)),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.Red.copy(alpha = 0.3f))
-                    ) {
-                        Text("Log Out", fontWeight = FontWeight.Bold, color = Color.Red.copy(alpha = 0.8f),)
-                    }
-
-                    if (state.error != null) {
-                        Text(
-                            text = state.error!!,
-                            color = Color.Red,
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 16.dp)
-                        )
-                    }
-
-                    if (state.updateSuccess) {
-                        Text(
-                            text = "Profile updated successfully!",
-                            color = Color.Black,
-                            style = MaterialTheme.typography.headlineMedium,
-                            modifier = Modifier.padding(top = 16.dp)
-                        )
-                        LaunchedEffect(Unit) {
-                            kotlinx.coroutines.delay(3000)
-                            viewModel.resetUpdateSuccess()
+                        if (state.updateSuccess) {
+                            Text(
+                                text = "Profile updated successfully!",
+                                color = Color.Black,
+                                style = MaterialTheme.typography.headlineMedium,
+                                modifier = Modifier.padding(top = 16.dp)
+                            )
+                            LaunchedEffect(Unit) {
+                                kotlinx.coroutines.delay(3000)
+                                viewModel.resetUpdateSuccess()
+                            }
                         }
                     }
                 }
+                
+                Spacer(modifier = Modifier.height(40.dp))
             }
-            
-            Spacer(modifier = Modifier.height(40.dp))
         }
     }
 }

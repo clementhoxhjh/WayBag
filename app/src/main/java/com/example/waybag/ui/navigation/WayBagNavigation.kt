@@ -6,8 +6,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.waybag.ui.screens.*
 
-import io.github.jan.supabase.auth.auth
-
 sealed class Screen(val route: String) {
     object Welcome : Screen("welcome")
     object Login : Screen("login")
@@ -27,16 +25,22 @@ fun WayBagNavHost() {
     val context = androidx.compose.ui.platform.LocalContext.current
     val navController = rememberNavController()
     
-    // NEW: Check local storage for auto-login as per Lab example
+    // NEW: Load user session into memory on app start
+    val session = androidx.compose.runtime.remember {
+        com.example.waybag.data.loadUserSession(context)
+    }
+    
+    // Check local storage flag
     val isLocallyLoggedIn = androidx.compose.runtime.remember { 
         com.example.waybag.data.isUserLoggedIn(context) 
     }
     
-    val currentUser = androidx.compose.runtime.remember { 
-        com.example.waybag.data.supabase.auth.currentUserOrNull() 
+    // Auto-navigate if both flag is true and session is loaded
+    val startRoute = if (isLocallyLoggedIn && session != null) {
+        Screen.Dashboard.route 
+    } else {
+        Screen.Welcome.route
     }
-    
-    val startRoute = if (isLocallyLoggedIn || currentUser != null) Screen.Dashboard.route else Screen.Welcome.route
 
     NavHost(
         navController = navController,

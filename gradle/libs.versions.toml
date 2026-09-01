@@ -12,6 +12,7 @@ navigationCompose = "2.9.8"
 supabase = "3.7.0"
 ktor = "3.0.1"
 kotlinxSerialization = "1.8.0"
+kotlinxCoroutines = "1.11.0"
 coil = "2.7.0"
 camerax = "1.4.1"
 mlkitBarcodeScanning = "17.3.0"
@@ -38,7 +39,6 @@ androidx-navigation-compose = { group = "androidx.navigation", name = "navigatio
 
 # Supabase & Ktor
 supabaseBom = { group = "io.github.jan-tennert.supabase", name = "bom", version.ref = "supabase" }
-supabaseAuth = { group = "io.github.jan-tennert.supabase", name = "auth-kt" }
 supabasePostgrest = { group = "io.github.jan-tennert.supabase", name = "postgrest-kt" }
 supabaseStorage = { group = "io.github.jan-tennert.supabase", name = "storage-kt" }
 ktorClientAndroid = { group = "io.ktor", name = "ktor-client-android", version.ref = "ktor" }
@@ -54,6 +54,7 @@ androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", 
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
 mlkit-barcode-scanning = { group = "com.google.mlkit", name = "barcode-scanning", version.ref = "mlkitBarcodeScanning" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
 google-generativeai = { group = "com.google.ai.client.generativeai", name = "generativeai", version.ref = "generativeai" }
 
 [plugins]

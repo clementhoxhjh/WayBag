@@ -5,7 +5,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.waybag.data.model.BagScan
 import com.example.waybag.data.supabase
-import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,6 +14,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 import com.example.waybag.data.model.UserProfile
+import com.example.waybag.data.CurrentUser
 
 data class ChartEntry(
     val value: Float,    // Normalized 0.0 to 1.0 for UI bar size
@@ -48,14 +48,14 @@ class HomeViewModel : ViewModel() {
     }
 
     fun refreshData() {
-        val user = supabase.auth.currentUserOrNull() ?: return
+        val currentUserId = CurrentUser.userId ?: return
         
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                // Fetch Profile
+                // Fetch Profile using local session ID
                 val profile = supabase.from("profiles").select {
-                    filter { eq("id", user.id) }
+                    filter { eq("profile_id", currentUserId) }
                 }.decodeSingleOrNull<UserProfile>()
                 Log.d("Dashboard", "Refreshed profile: $profile")
                 _userProfile.value = profile
@@ -63,7 +63,7 @@ class HomeViewModel : ViewModel() {
                 // Fetch Personal Scans for the counter
                 val personalScans = supabase.from("bag_scans").select {
                     filter {
-                        eq("userId", user.id)
+                        eq("profile_id", currentUserId)
                         eq("status", "completed")
                     }
                 }.decodeList<BagScan>()
@@ -118,7 +118,7 @@ class HomeViewModel : ViewModel() {
         
         scans.forEach { scan ->
             try {
-                val date: Date? = DateUtils.parseIsoTimestamp(scan.scanQR)
+                val date: Date? = DateUtils.parseIsoTimestamp(scan.scan_qr)
                 if (date != null && !date.before(weekStart) && date.before(weekEnd)) {
                     val scanCal = Calendar.getInstance().apply { time = date }
                     val dayOfWeek = scanCal.get(Calendar.DAY_OF_WEEK)
@@ -153,7 +153,7 @@ class HomeViewModel : ViewModel() {
         
         scans.forEach { scan ->
             try {
-                val month = scan.scanQR.substring(5, 7).toInt() // 2024-01-20 -> 01
+                val month = scan.scan_qr.substring(5, 7).toInt() // 2024-01-20 -> 01
                 if (month in 1..12) {
                     monthlyCounts[month - 1] += 1f
                 }

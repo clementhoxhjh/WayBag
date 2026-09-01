@@ -5,17 +5,17 @@ import kotlinx.serialization.SerialName
 
 @Serializable
 data class BagScan(
-    val id: Long? = null,
-    val userId: String,
-    val bagUniqueId: String,
-    val scanQR: String, // Renamed from timestamp
+    val scan_id: Long? = null,
+    val scan_qr: String,
     val status: String = "pending", // "pending", "completed", "failed"
-    // New fields for Receipt Validation
-    val storeName: String? = null,
-    val regNo: String? = null,
-    val totalAmount: Double? = null,
-    val itemsJson: String? = null,
-    val receiptTimestamp: String? = null,
-    val receiptImageUrl: String? = null,
-    val failureReason: String? = null
+    val failure_reason: String? = null,
+    val receipt_timestamp: String? = null,
+    val reg_no: String? = null,
+    val receipt_image_url: String? = null,
+    val store_name: String? = null,
+    val total_amount: Double? = null,
+    val items_json: String? = null,
+    val profile_id: String,
+    val bag_id: String
+
 )

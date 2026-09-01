@@ -17,6 +17,13 @@ private const val SESSION_FILE = "user_session.json"
 private const val PREFS_NAME = "waybag_prefs"
 private const val KEY_IS_LOGGED_IN = "is_logged_in"
 
+// Global holder for current user ID to avoid passing Context everywhere
+object CurrentUser {
+    var userId: String? = null
+    var email: String? = null
+    var name: String? = null
+}
+
 // ---------- Task 1: SharedPreferences (For simple flags) ----------
 fun saveLoginStatus(context: Context, isLoggedIn: Boolean) {
     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -30,6 +37,10 @@ fun isUserLoggedIn(context: Context): Boolean {
 
 // ---------- Task 3: JSON file (For structured User data) ----------
 fun saveUserSession(context: Context, session: UserSession) {
+    CurrentUser.userId = session.userId
+    CurrentUser.email = session.email
+    CurrentUser.name = session.name
+
     val json = Json.encodeToString(session)
     context.openFileOutput(SESSION_FILE, Context.MODE_PRIVATE).use {
         it.write(json.toByteArray())
@@ -40,13 +51,21 @@ fun loadUserSession(context: Context): UserSession? {
     val file = File(context.filesDir, SESSION_FILE)
     if (!file.exists()) return null
     return try {
-        Json.decodeFromString<UserSession>(file.readText())
+        val session = Json.decodeFromString<UserSession>(file.readText())
+        CurrentUser.userId = session.userId
+        CurrentUser.email = session.email
+        CurrentUser.name = session.name
+        session
     } catch (e: Exception) {
         null
     }
 }
 
 fun clearStorage(context: Context) {
+    CurrentUser.userId = null
+    CurrentUser.email = null
+    CurrentUser.name = null
+
     saveLoginStatus(context, false)
     val file = File(context.filesDir, SESSION_FILE)
     if (file.exists()) file.delete()
