@@ -33,9 +33,9 @@ class SignUpViewModel : ViewModel() {
     private val _state = MutableStateFlow(SignUpState())
     val state: StateFlow<SignUpState> = _state.asStateFlow()
 
-    fun onNameChange(newValue: String) { _state.update { it.copy(name = newValue) } }
+    fun onNameChange(newValue: String) { _state.update { it.copy(name = newValue.take(100)) } }
     fun onBirthdayChange(newValue: String) { _state.update { it.copy(birthday = newValue) } }
-    fun onEmailChange(newValue: String) { _state.update { it.copy(email = newValue) } }
+    fun onEmailChange(newValue: String) { _state.update { it.copy(email = newValue.take(129)) } }
     fun onPasswordChange(newValue: String) { _state.update { it.copy(password = newValue) } }
     fun onConfirmPasswordChange(newValue: String) { _state.update { it.copy(confirmPassword = newValue) } }
     
@@ -49,12 +49,32 @@ class SignUpViewModel : ViewModel() {
 
     fun signUp(context: Context) {
         val currentState = _state.value
-        if (currentState.password != currentState.confirmPassword) {
-            _state.update { it.copy(errorMessage = "Passwords do not match") }
+
+        val nameError = com.example.waybag.utils.ValidationUtils.validateName(currentState.name)
+        if (nameError != null) {
+            _state.update { it.copy(errorMessage = nameError) }
             return
         }
-        if (currentState.email.isBlank() || currentState.password.isBlank() || currentState.name.isBlank()) {
-            _state.update { it.copy(errorMessage = "Please fill all fields") }
+
+        if (currentState.birthday.isBlank()) {
+            _state.update { it.copy(errorMessage = "Please select your birthday") }
+            return
+        }
+
+        val emailError = com.example.waybag.utils.ValidationUtils.validateEmail(currentState.email)
+        if (emailError != null) {
+            _state.update { it.copy(errorMessage = emailError) }
+            return
+        }
+
+        val pwdError = com.example.waybag.utils.ValidationUtils.validatePasswordMinLength(currentState.password, "Password")
+        if (pwdError != null) {
+            _state.update { it.copy(errorMessage = pwdError) }
+            return
+        }
+
+        if (currentState.password != currentState.confirmPassword) {
+            _state.update { it.copy(errorMessage = "Passwords do not match") }
             return
         }
         

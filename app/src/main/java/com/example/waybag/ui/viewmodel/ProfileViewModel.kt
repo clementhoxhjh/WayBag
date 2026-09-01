@@ -69,9 +69,9 @@ class ProfileViewModel : ViewModel() {
         }
     }
 
-    fun onNameChange(newName: String) { _state.update { it.copy(name = newName) } }
+    fun onNameChange(newName: String) { _state.update { it.copy(name = newName.take(100)) } }
     fun onBirthdayChange(newBirthday: String) { _state.update { it.copy(birthday = newBirthday) } }
-    fun onEmailChange(newEmail: String) { _state.update { it.copy(email = newEmail) } }
+    fun onEmailChange(newEmail: String) { _state.update { it.copy(email = newEmail.take(129)) } }
     fun onCurrentPasswordChange(pwd: String) { _state.update { it.copy(currentPassword = pwd) } }
     fun onPasswordChange(newPassword: String) { _state.update { it.copy(password = newPassword) } }
     fun setShowDatePicker(show: Boolean) { _state.update { it.copy(showDatePicker = show) } }
@@ -109,11 +109,48 @@ class ProfileViewModel : ViewModel() {
         val currentUserId = CurrentUser.userId ?: return
         val currentState = _state.value
         
+        // Name validation (max 100)
+        val nameError = com.example.waybag.utils.ValidationUtils.validateName(currentState.name)
+        if (nameError != null) {
+            _state.update { it.copy(error = nameError) }
+            return
+        }
+
+        // Email validation
+        val emailError = com.example.waybag.utils.ValidationUtils.validateEmail(currentState.email)
+        if (emailError != null) {
+            _state.update { it.copy(error = emailError) }
+            return
+        }
+
+        // Current Password validation (must be >= 8 if entered or updating email/password)
+        val isUpdatingSensitiveFields = currentState.email != currentState.userProfile?.email || currentState.password.isNotEmpty()
+        if (isUpdatingSensitiveFields || currentState.currentPassword.isNotEmpty()) {
+            if (currentState.currentPassword.isBlank()) {
+                _state.update { it.copy(error = "Please enter current password to apply changes") }
+                return
+            }
+            val currentPwdError = com.example.waybag.utils.ValidationUtils.validatePasswordMinLength(currentState.currentPassword, "Current password")
+            if (currentPwdError != null) {
+                _state.update { it.copy(error = currentPwdError) }
+                return
+            }
+        }
+
+        // New Password validation (must be >= 8 if entered)
+        if (currentState.password.isNotEmpty()) {
+            val newPwdError = com.example.waybag.utils.ValidationUtils.validatePasswordMinLength(currentState.password, "New password")
+            if (newPwdError != null) {
+                _state.update { it.copy(error = newPwdError) }
+                return
+            }
+        }
+
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null, updateSuccess = false) }
             try {
                 // Verify current password manually from the fetched profile record
-                if (currentState.password.isNotEmpty() || currentState.email != currentState.userProfile?.email) {
+                if (isUpdatingSensitiveFields) {
                     if (currentState.currentPassword != currentState.userProfile?.password) {
                         _state.update { it.copy(isLoading = false, error = "Current password incorrect") }
                         return@launch
@@ -149,5 +186,6 @@ class ProfileViewModel : ViewModel() {
         }
     }
     
+    fun clearError() { _state.update { it.copy(error = null) } }
     fun resetUpdateSuccess() { _state.update { it.copy(updateSuccess = false) } }
 }

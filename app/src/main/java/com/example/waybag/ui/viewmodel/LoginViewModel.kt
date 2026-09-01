@@ -24,7 +24,7 @@ class LoginViewModel : ViewModel() {
     val state: StateFlow<LoginState> = _state.asStateFlow()
 
     fun onEmailChange(newValue: String) {
-        _state.update { it.copy(email = newValue) }
+        _state.update { it.copy(email = newValue.take(129)) }
     }
 
     fun onPasswordChange(newValue: String) {
@@ -37,8 +37,15 @@ class LoginViewModel : ViewModel() {
 
     fun login(context: Context, onLoginSuccess: () -> Unit) {
         val currentState = _state.value
-        if (currentState.email.isBlank() || currentState.password.isBlank()) {
-            _state.update { it.copy(errorMessage = "Please enter both email and password") }
+        
+        val emailError = com.example.waybag.utils.ValidationUtils.validateEmail(currentState.email)
+        if (emailError != null) {
+            _state.update { it.copy(errorMessage = emailError) }
+            return
+        }
+
+        if (currentState.password.isBlank()) {
+            _state.update { it.copy(errorMessage = "Please enter your password") }
             return
         }
         

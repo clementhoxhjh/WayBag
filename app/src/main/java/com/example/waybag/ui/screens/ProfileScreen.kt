@@ -48,6 +48,21 @@ fun ProfileScreen(
     val scope = rememberCoroutineScope()
     var showLogoutDialog by remember { mutableStateOf(false) }
 
+    if (state.error != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.clearError() },
+            confirmButton = {
+                TextButton(onClick = { viewModel.clearError() }) {
+                    Text("OK", color = Color.Red)
+                }
+            },
+            title = { Text("Error", color = Color.Red) },
+            text = { Text(state.error!!) },
+            shape = RoundedCornerShape(28.dp),
+            containerColor = Color.White
+        )
+    }
+
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
@@ -288,15 +303,6 @@ fun ProfileScreen(
                             border = androidx.compose.foundation.BorderStroke(1.dp, Color.Red.copy(alpha = 0.3f))
                         ) {
                             Text("Log Out", fontWeight = FontWeight.Bold, color = Color.Red.copy(alpha = 0.8f),)
-                        }
-
-                        if (state.error != null) {
-                            Text(
-                                text = state.error!!,
-                                color = Color.Red,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(top = 16.dp)
-                            )
                         }
 
                         if (state.updateSuccess) {

@@ -163,6 +163,7 @@ class AITrackerViewModel : ViewModel() {
                         CRITICAL INSTRUCTIONS:
                         - DO NOT GUESS. If time is missing, return "MISSING".
                         - timestamp: Search very carefully for date/time. Combine with HH:MM or HH:MM:SS.
+                        - If see the time in example(9:15 pm),then change to the 21:15,use this time format
                         - regNo: EXTRACT THE FULL REGISTRATION NUMBER. 
                           Example: "202401012345 (1309876-V)". MUST INCLUDE THE PARENTHESES AND ALL CHARACTERS.
                         
