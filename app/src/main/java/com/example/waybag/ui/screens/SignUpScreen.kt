@@ -235,7 +235,13 @@ fun SignUpScreen(
                     }
 
                     if (state.showDatePicker) {
-                        val datePickerState = rememberDatePickerState()
+                        val datePickerState = rememberDatePickerState(
+                            selectableDates = object : SelectableDates {
+                                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                                    return utcTimeMillis <= System.currentTimeMillis()
+                                }
+                            }
+                        )
                         DatePickerDialog(
                             onDismissRequest = { viewModel.setShowDatePicker(false) },
                             confirmButton = {
